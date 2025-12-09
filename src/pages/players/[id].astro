@@ -64,61 +64,61 @@ const achievementCounts = countAchievementsByType(achievements);
 ---
 
 <Layout title={player.username}>
-  <div class="space-y-8">
+  <div class="space-y-4 sm:space-y-8">
     <!-- Player Header -->
     <div class="aoe-panel">
-      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
-        <div class="flex items-center gap-4">
-          <div class="w-20 h-20 rounded-full bg-gradient-to-br from-aoe-gold via-amber-500 to-amber-700 flex items-center justify-center text-4xl border-4 border-aoe-gold shadow-lg">
+      <div class="flex flex-col gap-4 sm:gap-6">
+        <div class="flex items-center gap-3 sm:gap-4">
+          <div class="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-aoe-gold via-amber-500 to-amber-700 flex items-center justify-center text-2xl sm:text-4xl border-3 sm:border-4 border-aoe-gold shadow-lg flex-shrink-0">
             {getCivilizationFlag(player.favoriteCiv)}
           </div>
-          <div>
-            <h1 class="aoe-title text-3xl mb-1">{player.username}</h1>
-            <p class="text-aoe-cream-dark text-sm">
+          <div class="min-w-0">
+            <h1 class="aoe-title text-xl sm:text-3xl mb-0.5 sm:mb-1 truncate">{player.username}</h1>
+            <p class="text-aoe-cream-dark text-xs sm:text-sm">
               {getCivilizationName(player.favoriteCiv)}
             </p>
-            <p class={`text-lg font-semibold ${getTierColor(player.eloRating)}`}>
+            <p class={`text-sm sm:text-lg font-semibold ${getTierColor(player.eloRating)}`}>
               {getRatingTier(player.eloRating)}
             </p>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div class="aoe-stat">
-            <div class="aoe-stat-value">{Math.round(player.eloRating)}</div>
-            <div class="aoe-stat-label">ELO 1v1</div>
+        <div class="grid grid-cols-4 gap-2 sm:gap-4">
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl">{Math.round(player.eloRating)}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">ELO</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value">{totalMatches}</div>
-            <div class="aoe-stat-label">Partidas</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl">{totalMatches}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">Games</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value text-green-400">{wins}</div>
-            <div class="aoe-stat-label">Victorias</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl text-green-400">{wins}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">Wins</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value">{winRate}%</div>
-            <div class="aoe-stat-label">Win Rate</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl">{winRate}%</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">WR</div>
           </div>
         </div>
       </div>
 
       <!-- Racha Actual Mejorada -->
       {streak.type !== 'none' && streak.count >= 2 && (
-        <div class={`mt-4 pt-4 border-t border-aoe-gold/20 ${streak.type === 'win' ? 'bg-green-900/10' : 'bg-red-900/10'} -mx-4 px-4 pb-4 rounded-b`}>
-          <div class="flex items-center justify-between">
-            <div class="flex items-center gap-3">
-              <span class="text-4xl">{streak.type === 'win' ? '🔥' : '💩'}</span>
-              <div>
-                <p class={`font-bold text-lg ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+        <div class={`mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-aoe-gold/20 ${streak.type === 'win' ? 'bg-green-900/10' : 'bg-red-900/10'} -mx-3 sm:-mx-4 px-3 sm:px-4 pb-3 sm:pb-4 rounded-b`}>
+          <div class="flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2 sm:gap-3 min-w-0">
+              <span class="text-2xl sm:text-4xl flex-shrink-0">{streak.type === 'win' ? '🔥' : '💩'}</span>
+              <div class="min-w-0">
+                <p class={`font-bold text-sm sm:text-lg ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'} truncate`}>
                   {streak.frase}
                 </p>
-                <p class="text-aoe-cream-dark text-sm">
-                  {streak.count} {streak.type === 'win' ? 'victorias' : 'derrotas'} seguidas
+                <p class="text-aoe-cream-dark text-xs sm:text-sm">
+                  {streak.count} {streak.type === 'win' ? 'W' : 'L'} seguidas
                 </p>
               </div>
             </div>
-            <div class={`text-5xl font-cinzel ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+            <div class={`text-3xl sm:text-5xl font-cinzel flex-shrink-0 ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
               {streak.count}
             </div>
           </div>
@@ -128,20 +128,20 @@ const achievementCounts = countAchievementsByType(achievements);
 
     <!-- Némesis y Víctima -->
     {(nemesis || victim) && (
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
         {nemesis && (
           <div class="aoe-panel border-red-500/30 bg-gradient-to-br from-red-900/20 to-transparent">
-            <div class="flex items-center gap-4">
-              <div class="w-16 h-16 rounded-full bg-red-900/50 flex items-center justify-center text-3xl border-2 border-red-500">
+            <div class="flex items-center gap-3 sm:gap-4">
+              <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-red-900/50 flex items-center justify-center text-2xl sm:text-3xl border-2 border-red-500 flex-shrink-0">
                 😈
               </div>
-              <div class="flex-1">
-                <h3 class="text-red-400 text-sm uppercase tracking-wider">Tu Némesis</h3>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-red-400 text-xs sm:text-sm uppercase tracking-wider">Tu Némesis</h3>
                 <a href={`/players/${nemesis.playerId}`} class="block">
-                  <span class="text-xl font-cinzel text-red-400 hover:text-red-300">{nemesis.name}</span>
+                  <span class="text-base sm:text-xl font-cinzel text-red-400 hover:text-red-300">{nemesis.name}</span>
                 </a>
-                <p class="text-aoe-cream-dark text-sm">
-                  {nemesis.name} {nemesis.frase} ({nemesis.wins}-{nemesis.losses})
+                <p class="text-aoe-cream-dark text-xs sm:text-sm truncate">
+                  {nemesis.frase} ({nemesis.wins}-{nemesis.losses})
                 </p>
               </div>
             </div>
@@ -150,17 +150,17 @@ const achievementCounts = countAchievementsByType(achievements);
 
         {victim && (
           <div class="aoe-panel border-green-500/30 bg-gradient-to-br from-green-900/20 to-transparent">
-            <div class="flex items-center gap-4">
-              <div class="w-16 h-16 rounded-full bg-green-900/50 flex items-center justify-center text-3xl border-2 border-green-500">
+            <div class="flex items-center gap-3 sm:gap-4">
+              <div class="w-12 h-12 sm:w-16 sm:h-16 rounded-full bg-green-900/50 flex items-center justify-center text-2xl sm:text-3xl border-2 border-green-500 flex-shrink-0">
                 👶
               </div>
-              <div class="flex-1">
-                <h3 class="text-green-400 text-sm uppercase tracking-wider">Tu Víctima</h3>
+              <div class="flex-1 min-w-0">
+                <h3 class="text-green-400 text-xs sm:text-sm uppercase tracking-wider">Tu Víctima</h3>
                 <a href={`/players/${victim.playerId}`} class="block">
-                  <span class="text-xl font-cinzel text-green-400 hover:text-green-300">{victim.name}</span>
+                  <span class="text-base sm:text-xl font-cinzel text-green-400 hover:text-green-300">{victim.name}</span>
                 </a>
-                <p class="text-aoe-cream-dark text-sm">
-                  {victim.name} {victim.frase} ({victim.wins}-{victim.losses})
+                <p class="text-aoe-cream-dark text-xs sm:text-sm truncate">
+                  {victim.frase} ({victim.wins}-{victim.losses})
                 </p>
               </div>
             </div>
@@ -172,25 +172,25 @@ const achievementCounts = countAchievementsByType(achievements);
     <!-- Logros -->
     {achievements.length > 0 && (
       <div class="aoe-panel">
-        <div class="flex items-center justify-between mb-4">
-          <h2 class="aoe-title text-xl">🏆 Logros Desbloqueados</h2>
-          <div class="flex gap-2 text-sm">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-3 sm:mb-4">
+          <h2 class="aoe-title text-lg sm:text-xl">🏆 Logros</h2>
+          <div class="flex gap-2 text-xs sm:text-sm">
             <span class="text-green-400">{achievementCounts.glory} gloria</span>
             <span class="text-aoe-cream-dark">|</span>
             <span class="text-red-400">{achievementCounts.shame} vergüenza</span>
           </div>
         </div>
 
-        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
           {achievements.map(achievement => (
-            <div class={`p-3 rounded border ${
+            <div class={`p-2 sm:p-3 rounded border ${
               achievement.type === 'glory' ? 'bg-green-900/20 border-green-500/30' :
               achievement.type === 'shame' ? 'bg-red-900/20 border-red-500/30' :
               'bg-aoe-dark/50 border-aoe-gold/20'
             }`}>
-              <div class="flex items-center gap-2 mb-1">
-                <span class="text-2xl">{achievement.icon}</span>
-                <span class={`font-semibold text-sm ${
+              <div class="flex items-center gap-1.5 sm:gap-2 mb-0.5 sm:mb-1">
+                <span class="text-lg sm:text-2xl">{achievement.icon}</span>
+                <span class={`font-semibold text-xs sm:text-sm ${
                   achievement.type === 'glory' ? 'text-green-400' :
                   achievement.type === 'shame' ? 'text-red-400' :
                   'text-aoe-gold'
@@ -198,31 +198,31 @@ const achievementCounts = countAchievementsByType(achievements);
                   {achievement.name}
                 </span>
               </div>
-              <p class="text-xs text-aoe-cream-dark">{achievement.description}</p>
+              <p class="text-[10px] sm:text-xs text-aoe-cream-dark line-clamp-2">{achievement.description}</p>
             </div>
           ))}
         </div>
       </div>
     )}
 
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-8">
       <!-- Civilization Stats -->
       <div class="aoe-panel">
-        <h2 class="aoe-title text-xl mb-4">🏛️ Civilizaciones</h2>
+        <h2 class="aoe-title text-lg sm:text-xl mb-3 sm:mb-4">🏛️ Civilizaciones</h2>
 
         {civStats.length === 0 ? (
-          <p class="text-aoe-cream-dark text-center py-4">Sin partidas registradas</p>
+          <p class="text-aoe-cream-dark text-center py-4 text-sm">Sin partidas registradas</p>
         ) : (
-          <div class="space-y-3">
+          <div class="space-y-2 sm:space-y-3">
             {civStats.map((civ) => {
               const civWinRate = civ.count > 0 ? Math.round((civ.wins / civ.count) * 100) : 0;
               return (
-                <div class="flex items-center justify-between p-2 bg-aoe-dark/50 rounded">
-                  <span class="text-aoe-cream">{getCivilizationName(civ.civilization)}</span>
-                  <div class="flex items-center gap-4">
-                    <span class="text-sm text-aoe-cream-dark">{civ.count} partidas</span>
-                    <span class={`text-sm font-semibold ${civWinRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
-                      {civWinRate}% WR
+                <div class="flex items-center justify-between p-2 bg-aoe-dark/50 rounded text-sm">
+                  <span class="text-aoe-cream truncate mr-2">{getCivilizationName(civ.civilization)}</span>
+                  <div class="flex items-center gap-2 sm:gap-4 flex-shrink-0">
+                    <span class="text-xs sm:text-sm text-aoe-cream-dark">{civ.count}</span>
+                    <span class={`text-xs sm:text-sm font-semibold ${civWinRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                      {civWinRate}%
                     </span>
                   </div>
                 </div>
@@ -234,27 +234,27 @@ const achievementCounts = countAchievementsByType(achievements);
 
       <!-- Quick Stats -->
       <div class="aoe-panel">
-        <h2 class="aoe-title text-xl mb-4">📊 Estadísticas</h2>
-        <div class="grid grid-cols-2 gap-4">
-          <div class="aoe-stat">
-            <div class="aoe-stat-value">{Math.round(player.eloTeams)}</div>
-            <div class="aoe-stat-label">ELO Equipos</div>
+        <h2 class="aoe-title text-lg sm:text-xl mb-3 sm:mb-4">📊 Stats Extra</h2>
+        <div class="grid grid-cols-2 gap-2 sm:gap-4">
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl">{Math.round(player.eloTeams)}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">ELO Teams</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value">{Math.round(player.eloFfa)}</div>
-            <div class="aoe-stat-label">ELO FFA</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl">{Math.round(player.eloFfa)}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">ELO FFA</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value text-green-400">{fullStats.maxWinStreak}</div>
-            <div class="aoe-stat-label">Mejor Racha W</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl text-green-400">{fullStats.maxWinStreak}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">Best Win</div>
           </div>
-          <div class="aoe-stat">
-            <div class="aoe-stat-value text-red-400">{fullStats.maxLossStreak}</div>
-            <div class="aoe-stat-label">Peor Racha L</div>
+          <div class="aoe-stat p-2 sm:p-3">
+            <div class="aoe-stat-value text-lg sm:text-2xl text-red-400">{fullStats.maxLossStreak}</div>
+            <div class="aoe-stat-label text-[10px] sm:text-xs">Worst Loss</div>
           </div>
         </div>
 
-        <a href={`/head-to-head?player1=${playerId}`} class="block text-center mt-4 text-aoe-gold hover:text-aoe-gold-light text-sm">
+        <a href={`/head-to-head?player1=${playerId}`} class="block text-center mt-3 sm:mt-4 text-aoe-gold hover:text-aoe-gold-light text-xs sm:text-sm">
           Ver enfrentamientos →
         </a>
       </div>
@@ -262,36 +262,36 @@ const achievementCounts = countAchievementsByType(achievements);
 
     <!-- Recent Matches -->
     <div class="aoe-panel">
-      <h2 class="aoe-title text-xl mb-4">📜 Partidas Recientes</h2>
+      <h2 class="aoe-title text-lg sm:text-xl mb-3 sm:mb-4">📜 Partidas Recientes</h2>
 
       {recentMatches.length === 0 ? (
-        <p class="text-aoe-cream-dark text-center py-4">Sin partidas registradas</p>
+        <p class="text-aoe-cream-dark text-center py-4 text-sm">Sin partidas registradas</p>
       ) : (
-        <div class="overflow-x-auto">
+        <div class="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
           <table class="aoe-table">
             <thead>
               <tr>
-                <th>Fecha</th>
+                <th class="hidden sm:table-cell">Fecha</th>
                 <th>Tipo</th>
-                <th>Civilización</th>
-                <th class="text-center">Resultado</th>
+                <th class="hidden sm:table-cell">Civ</th>
+                <th class="text-center">Result</th>
                 <th class="text-center">ELO</th>
               </tr>
             </thead>
             <tbody>
               {recentMatches.map((match) => (
                 <tr>
-                  <td class="text-aoe-cream-dark">
+                  <td class="text-aoe-cream-dark hidden sm:table-cell">
                     {match.playedAt ? new Date(match.playedAt).toLocaleDateString('es') : '-'}
                   </td>
-                  <td>{match.matchType}</td>
-                  <td>{getCivilizationName(match.civilization)}</td>
+                  <td class="text-xs sm:text-sm">{match.matchType}</td>
+                  <td class="hidden sm:table-cell text-xs sm:text-sm">{getCivilizationName(match.civilization)}</td>
                   <td class="text-center">
-                    <span class={`aoe-badge ${match.isWinner ? 'aoe-badge-win' : 'aoe-badge-loss'}`}>
-                      {match.isWinner ? 'Victoria' : 'Derrota'}
+                    <span class={`inline-block px-1.5 sm:px-2 py-0.5 sm:py-1 text-[10px] sm:text-xs rounded ${match.isWinner ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                      {match.isWinner ? 'W' : 'L'}
                     </span>
                   </td>
-                  <td class={`text-center font-semibold ${(match.eloChange || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  <td class={`text-center font-semibold text-xs sm:text-sm ${(match.eloChange || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {match.eloChange && match.eloChange > 0 ? '+' : ''}{match.eloChange ? Math.round(match.eloChange) : 0}
                   </td>
                 </tr>
@@ -302,7 +302,7 @@ const achievementCounts = countAchievementsByType(achievements);
       )}
     </div>
 
-    <a href="/players" class="inline-block text-aoe-gold hover:text-aoe-gold-light">
+    <a href="/players" class="inline-block text-aoe-gold hover:text-aoe-gold-light text-sm sm:text-base">
       ← Volver a jugadores
     </a>
   </div>

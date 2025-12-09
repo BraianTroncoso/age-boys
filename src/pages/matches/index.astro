@@ -51,66 +51,64 @@ const getPageNumbers = () => {
 ---
 
 <Layout title="Historial de Partidas">
-  <div class="space-y-8">
+  <div class="space-y-4 sm:space-y-8">
     <div class="text-center">
-      <h1 class="aoe-title text-3xl mb-2">Historial de Partidas</h1>
-      <p class="text-aoe-cream-dark mb-4">{totalMatches} partidas registradas</p>
-      <a href="/matches/new" class="aoe-btn-primary">+ Nueva Partida</a>
+      <h1 class="aoe-title text-2xl sm:text-3xl mb-2">Historial de Partidas</h1>
+      <p class="text-aoe-cream-dark mb-3 sm:mb-4 text-sm sm:text-base">{totalMatches} partidas registradas</p>
+      <a href="/matches/new" class="aoe-btn-primary text-sm sm:text-base">+ Nueva Partida</a>
     </div>
 
     {totalMatches === 0 ? (
-      <div class="aoe-panel text-center py-12">
-        <span class="text-6xl mb-4 block">📜</span>
-        <h2 class="aoe-title text-xl mb-2">Sin partidas</h2>
-        <p class="text-aoe-cream-dark mb-4">No hay partidas registradas aún</p>
-        <a href="/matches/new" class="aoe-btn-primary inline-block">Registrar Primera Partida</a>
+      <div class="aoe-panel text-center py-8 sm:py-12">
+        <span class="text-4xl sm:text-6xl mb-3 sm:mb-4 block">📜</span>
+        <h2 class="aoe-title text-lg sm:text-xl mb-2">Sin partidas</h2>
+        <p class="text-aoe-cream-dark mb-3 sm:mb-4 text-sm sm:text-base">No hay partidas registradas aún</p>
+        <a href="/matches/new" class="aoe-btn-primary inline-block text-sm sm:text-base">Registrar Primera Partida</a>
       </div>
     ) : (
       <>
-        <div class="space-y-4">
+        <div class="space-y-3 sm:space-y-4">
           {matchesWithParticipants.map((match) => {
             const winners = match.participants.filter(p => p.isWinner);
             const losers = match.participants.filter(p => !p.isWinner);
             return (
               <div class="aoe-panel">
-                <div class="flex justify-between items-start mb-4">
-                  <div class="flex items-center gap-4">
-                    <span class="text-2xl">{match.matchType === '1v1' ? '⚔️' : match.matchType === 'ffa' ? '👑' : '⚔️⚔️'}</span>
+                <div class="flex justify-between items-start mb-3 sm:mb-4">
+                  <div class="flex items-center gap-2 sm:gap-4">
+                    <span class="text-xl sm:text-2xl">{match.matchType === '1v1' ? '⚔️' : match.matchType === 'ffa' ? '👑' : '⚔️'}</span>
                     <div>
-                      <span class="font-cinzel text-lg text-aoe-gold uppercase">{match.matchType}</span>
-                      <p class="text-sm text-aoe-cream-dark">{new Date(match.playedAt).toLocaleDateString('es', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                      <span class="font-cinzel text-base sm:text-lg text-aoe-gold uppercase">{match.matchType}</span>
+                      <p class="text-xs sm:text-sm text-aoe-cream-dark">{new Date(match.playedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}</p>
                     </div>
                   </div>
                 </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div class="bg-green-900/20 border border-green-500/30 rounded p-4">
-                    <h4 class="text-green-400 font-semibold mb-3 flex items-center gap-2">
-                      <span>🏆</span>{winners.length > 1 ? 'Equipo Ganador' : 'Ganador'}
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
+                  <div class="bg-green-900/20 border border-green-500/30 rounded p-3 sm:p-4">
+                    <h4 class="text-green-400 font-semibold mb-2 sm:mb-3 flex items-center gap-2 text-sm sm:text-base">
+                      <span>🏆</span>{winners.length > 1 ? 'Ganadores' : 'Ganador'}
                     </h4>
-                    <div class="space-y-2">
+                    <div class="space-y-1.5 sm:space-y-2">
                       {winners.map((p) => (
-                        <div class="flex justify-between items-center">
-                          <div>
-                            <a href={`/players/${p.playerId}`} class="text-aoe-cream hover:text-aoe-gold">{p.playerName}</a>
-                            <span class="text-xs text-aoe-cream-dark ml-2">({getCivilizationName(p.civilization)})</span>
+                        <div class="flex justify-between items-center text-sm">
+                          <div class="min-w-0">
+                            <a href={`/players/${p.playerId}`} class="text-aoe-cream hover:text-aoe-gold truncate block">{p.playerName}</a>
                           </div>
-                          <span class="text-green-400 text-sm font-semibold">+{Math.round(p.eloChange)}</span>
+                          <span class="text-green-400 text-xs sm:text-sm font-semibold flex-shrink-0 ml-2">+{Math.round(p.eloChange)}</span>
                         </div>
                       ))}
                     </div>
                   </div>
-                  <div class="bg-red-900/20 border border-red-500/30 rounded p-4">
-                    <h4 class="text-red-400 font-semibold mb-3 flex items-center gap-2">
-                      <span>💀</span>{losers.length > 1 ? (match.matchType === 'ffa' ? 'Perdedores' : 'Equipo Perdedor') : 'Perdedor'}
+                  <div class="bg-red-900/20 border border-red-500/30 rounded p-3 sm:p-4">
+                    <h4 class="text-red-400 font-semibold mb-2 sm:mb-3 flex items-center gap-2 text-sm sm:text-base">
+                      <span>💀</span>{losers.length > 1 ? 'Perdedores' : 'Perdedor'}
                     </h4>
-                    <div class="space-y-2">
+                    <div class="space-y-1.5 sm:space-y-2">
                       {losers.map((p) => (
-                        <div class="flex justify-between items-center">
-                          <div>
-                            <a href={`/players/${p.playerId}`} class="text-aoe-cream hover:text-aoe-gold">{p.playerName}</a>
-                            <span class="text-xs text-aoe-cream-dark ml-2">({getCivilizationName(p.civilization)})</span>
+                        <div class="flex justify-between items-center text-sm">
+                          <div class="min-w-0">
+                            <a href={`/players/${p.playerId}`} class="text-aoe-cream hover:text-aoe-gold truncate block">{p.playerName}</a>
                           </div>
-                          <span class="text-red-400 text-sm font-semibold">{Math.round(p.eloChange)}</span>
+                          <span class="text-red-400 text-xs sm:text-sm font-semibold flex-shrink-0 ml-2">{Math.round(p.eloChange)}</span>
                         </div>
                       ))}
                     </div>
@@ -122,17 +120,17 @@ const getPageNumbers = () => {
         </div>
 
         {totalPages > 1 && (
-          <div class="flex justify-center items-center gap-2 mt-8">
+          <div class="flex flex-wrap justify-center items-center gap-2 mt-4 sm:mt-8">
             {validPage > 1 ? (
               <a
                 href={`/matches?page=${validPage - 1}`}
-                class="px-3 py-2 rounded bg-aoe-dark border border-aoe-gold/30 text-aoe-cream hover:bg-aoe-gold/20 transition-colors"
+                class="px-2 sm:px-3 py-1.5 sm:py-2 rounded bg-aoe-dark border border-aoe-gold/30 text-aoe-cream hover:bg-aoe-gold/20 transition-colors text-xs sm:text-sm"
               >
-                ← Anterior
+                ←
               </a>
             ) : (
-              <span class="px-3 py-2 rounded bg-aoe-dark/50 border border-aoe-gold/10 text-aoe-cream-dark cursor-not-allowed">
-                ← Anterior
+              <span class="px-2 sm:px-3 py-1.5 sm:py-2 rounded bg-aoe-dark/50 border border-aoe-gold/10 text-aoe-cream-dark cursor-not-allowed text-xs sm:text-sm">
+                ←
               </span>
             )}
 
@@ -141,7 +139,7 @@ const getPageNumbers = () => {
                 typeof page === 'number' ? (
                   <a
                     href={`/matches?page=${page}`}
-                    class={`w-10 h-10 flex items-center justify-center rounded border transition-colors ${
+                    class={`w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center rounded border transition-colors text-xs sm:text-sm ${
                       page === validPage
                         ? 'bg-aoe-gold text-aoe-dark font-bold border-aoe-gold'
                         : 'bg-aoe-dark border-aoe-gold/30 text-aoe-cream hover:bg-aoe-gold/20'
@@ -150,7 +148,7 @@ const getPageNumbers = () => {
                     {page}
                   </a>
                 ) : (
-                  <span class="w-10 h-10 flex items-center justify-center text-aoe-cream-dark">
+                  <span class="w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center text-aoe-cream-dark text-xs sm:text-sm">
                     {page}
                   </span>
                 )
@@ -160,21 +158,21 @@ const getPageNumbers = () => {
             {validPage < totalPages ? (
               <a
                 href={`/matches?page=${validPage + 1}`}
-                class="px-3 py-2 rounded bg-aoe-dark border border-aoe-gold/30 text-aoe-cream hover:bg-aoe-gold/20 transition-colors"
+                class="px-2 sm:px-3 py-1.5 sm:py-2 rounded bg-aoe-dark border border-aoe-gold/30 text-aoe-cream hover:bg-aoe-gold/20 transition-colors text-xs sm:text-sm"
               >
-                Siguiente →
+                →
               </a>
             ) : (
-              <span class="px-3 py-2 rounded bg-aoe-dark/50 border border-aoe-gold/10 text-aoe-cream-dark cursor-not-allowed">
-                Siguiente →
+              <span class="px-2 sm:px-3 py-1.5 sm:py-2 rounded bg-aoe-dark/50 border border-aoe-gold/10 text-aoe-cream-dark cursor-not-allowed text-xs sm:text-sm">
+                →
               </span>
             )}
           </div>
         )}
 
         {totalPages > 1 && (
-          <p class="text-center text-aoe-cream-dark text-sm">
-            Pagina {validPage} de {totalPages}
+          <p class="text-center text-aoe-cream-dark text-xs sm:text-sm">
+            Página {validPage} de {totalPages}
           </p>
         )}
       </>

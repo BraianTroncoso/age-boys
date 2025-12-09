@@ -26,15 +26,15 @@ for (const player of players) {
 ---
 
 <Layout title="Jugadores">
-  <div class="space-y-8">
-    <div class="flex justify-between items-center">
+  <div class="space-y-4 sm:space-y-8">
+    <div class="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
       <div>
-        <h1 class="aoe-title text-3xl mb-2">Jugadores</h1>
-        <p class="text-aoe-cream-dark">{playersWithStats.length} jugadores registrados</p>
+        <h1 class="aoe-title text-2xl sm:text-3xl mb-1 sm:mb-2">Jugadores</h1>
+        <p class="text-aoe-cream-dark text-sm sm:text-base">{playersWithStats.length} jugadores</p>
       </div>
       {userIsAdmin && (
-        <button id="addPlayerBtn" class="aoe-btn-primary">
-          + Nuevo Jugador
+        <button id="addPlayerBtn" class="aoe-btn-primary text-sm sm:text-base">
+          + Nuevo
         </button>
       )}
     </div>
@@ -59,42 +59,42 @@ for (const player of players) {
     </div>
 
     {playersWithStats.length === 0 ? (
-      <div class="aoe-panel text-center py-12">
-        <span class="text-6xl mb-4 block">👥</span>
-        <h2 class="aoe-title text-xl mb-2">No hay jugadores</h2>
-        <p class="text-aoe-cream-dark mb-4">Agrega jugadores para empezar a registrar partidas</p>
+      <div class="aoe-panel text-center py-8 sm:py-12">
+        <span class="text-4xl sm:text-6xl mb-3 sm:mb-4 block">👥</span>
+        <h2 class="aoe-title text-lg sm:text-xl mb-2">No hay jugadores</h2>
+        <p class="text-aoe-cream-dark mb-3 sm:mb-4 text-sm sm:text-base">Agrega jugadores para empezar</p>
       </div>
     ) : (
-      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-6">
         {playersWithStats.map((player, index) => (
           <a href={`/players/${player.id}`} class="aoe-card hover:shadow-gold-lg transition-shadow group">
-            <div class="flex items-start justify-between mb-4">
+            <div class="flex items-start justify-between mb-3 sm:mb-4">
               <div>
-                <div class="text-2xl mb-1">
+                <div class="text-xl sm:text-2xl mb-0.5 sm:mb-1">
                   {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : player.civFlag}
                 </div>
-                <h3 class="font-cinzel text-xl text-aoe-cream group-hover:text-aoe-gold transition-colors">{player.username}</h3>
-                <p class={`text-sm ${getTierColor(player.eloRating)}`}>{getRatingTier(player.eloRating)}</p>
+                <h3 class="font-cinzel text-base sm:text-xl text-aoe-cream group-hover:text-aoe-gold transition-colors">{player.username}</h3>
+                <p class={`text-xs sm:text-sm ${getTierColor(player.eloRating)}`}>{getRatingTier(player.eloRating)}</p>
               </div>
               <div class="text-right">
-                <div class="aoe-stat-value">{Math.round(player.eloRating)}</div>
-                <div class="text-xs text-aoe-cream-dark">ELO</div>
+                <div class="aoe-stat-value text-lg sm:text-2xl">{Math.round(player.eloRating)}</div>
+                <div class="text-[10px] sm:text-xs text-aoe-cream-dark">ELO</div>
               </div>
             </div>
-            <div class="grid grid-cols-3 gap-2">
-              <div class="aoe-stat">
-                <div class="aoe-stat-value text-lg">{player.totalMatches}</div>
-                <div class="aoe-stat-label">Partidas</div>
+            <div class="grid grid-cols-3 gap-1.5 sm:gap-2">
+              <div class="aoe-stat p-1.5 sm:p-3">
+                <div class="aoe-stat-value text-sm sm:text-lg">{player.totalMatches}</div>
+                <div class="aoe-stat-label text-[9px] sm:text-xs">Games</div>
               </div>
-              <div class="aoe-stat">
-                <div class="aoe-stat-value text-lg text-green-400">{player.wins}</div>
-                <div class="aoe-stat-label">Victorias</div>
+              <div class="aoe-stat p-1.5 sm:p-3">
+                <div class="aoe-stat-value text-sm sm:text-lg text-green-400">{player.wins}</div>
+                <div class="aoe-stat-label text-[9px] sm:text-xs">Wins</div>
               </div>
-              <div class="aoe-stat">
-                <div class="aoe-stat-value text-lg">
+              <div class="aoe-stat p-1.5 sm:p-3">
+                <div class="aoe-stat-value text-sm sm:text-lg">
                   {player.totalMatches > 0 ? Math.round((player.wins / player.totalMatches) * 100) : 0}%
                 </div>
-                <div class="aoe-stat-label">Win Rate</div>
+                <div class="aoe-stat-label text-[9px] sm:text-xs">WR</div>
               </div>
             </div>
           </a>

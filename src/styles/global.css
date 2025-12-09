@@ -213,3 +213,98 @@ body {
 .animate-gold-glow {
   animation: goldGlow 2s ease-in-out infinite;
 }
+
+/* ==================== */
+/* RESPONSIVE UTILITIES */
+/* ==================== */
+
+/* Mobile-first responsive cards */
+@layer components {
+  .aoe-card {
+    @apply p-3 sm:p-4;
+  }
+
+  .aoe-panel {
+    @apply p-4 sm:p-6;
+  }
+
+  .aoe-stat-value {
+    @apply text-xl sm:text-2xl;
+  }
+
+  .aoe-title {
+    @apply text-lg sm:text-xl md:text-2xl;
+  }
+
+  /* Responsive table */
+  .aoe-table th,
+  .aoe-table td {
+    @apply px-2 py-2 sm:px-4 sm:py-3 text-xs sm:text-sm;
+  }
+}
+
+/* Mobile scroll for tables */
+.table-responsive {
+  @apply overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0;
+}
+
+/* Mobile stack helper */
+.mobile-stack {
+  @apply flex flex-col gap-4 sm:flex-row sm:items-center;
+}
+
+/* Mobile grid helpers */
+.mobile-cols-1 {
+  @apply grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3;
+}
+
+.mobile-cols-2 {
+  @apply grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4;
+}
+
+/* Hide on mobile, show on desktop */
+.desktop-only {
+  @apply hidden md:block;
+}
+
+/* Show on mobile, hide on desktop */
+.mobile-only {
+  @apply block md:hidden;
+}
+
+/* Responsive text sizes */
+.text-responsive-sm {
+  @apply text-xs sm:text-sm;
+}
+
+.text-responsive-base {
+  @apply text-sm sm:text-base;
+}
+
+.text-responsive-lg {
+  @apply text-base sm:text-lg md:text-xl;
+}
+
+.text-responsive-xl {
+  @apply text-lg sm:text-xl md:text-2xl;
+}
+
+.text-responsive-2xl {
+  @apply text-xl sm:text-2xl md:text-3xl;
+}
+
+.text-responsive-3xl {
+  @apply text-2xl sm:text-3xl md:text-4xl;
+}
+
+/* Mobile touch targets */
+@media (max-width: 640px) {
+  .aoe-btn {
+    @apply px-4 py-3 text-sm min-h-[44px];
+  }
+
+  .aoe-input,
+  .aoe-select {
+    @apply py-3 text-base min-h-[44px];
+  }
+}

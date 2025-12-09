@@ -4,12 +4,21 @@ Aplicacion web para trackear partidas de Age of Empires 3 entre amigos con siste
 
 ## Tech Stack
 
-- **Astro** - Framework SSR con Node adapter
-- **React** - Componentes interactivos
-- **Tailwind CSS** - Estilos con tema personalizado AoE3
-- **JSON Database** - Base de datos en archivos JSON (src/db/data/)
+- **Astro 5.1.1** - Framework SSR con output: 'server'
+- **@astrojs/vercel 8.0.1** - Adapter para Vercel serverless (Node 20)
+- **React 18** - Componentes interactivos
+- **Tailwind CSS 3.4** - Estilos con tema personalizado AoE3
+- **Turso (LibSQL)** - Base de datos SQLite en la nube
 - **bcryptjs** - Hashing de passwords
 - **Canvas API** - Generacion de memes
+
+## Deployment
+
+- **Host:** Vercel (serverless functions)
+- **Database:** Turso (SQLite cloud)
+- **Variables de entorno:**
+  - `TURSO_DATABASE_URL` - URL de la base de datos
+  - `TURSO_AUTH_TOKEN` - Token de autenticacion
 
 
 
@@ -67,6 +76,7 @@ src/
 - Login con cookies de sesion
 - Fusion usuario/jugador (un user = un player)
 - Sistema de admin (isAdmin flag)
+- **Admin oculto de rankings** - El admin puede jugar pero no aparece en rankings ni como boludo de la semana
 - Perfil privado para editar civilizacion favorita
 - Perfil publico con todas las estadisticas
 

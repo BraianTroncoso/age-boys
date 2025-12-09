@@ -1,11 +1,12 @@
 import { defineConfig } from 'astro/config';
 import react from '@astrojs/react';
 import tailwind from '@astrojs/tailwind';
-import vercel from '@astrojs/vercel';
+
+const isVercel = process.env.VERCEL === '1';
 
 export default defineConfig({
   output: 'server',
-  adapter: vercel(),
+  adapter: isVercel ? (await import('@astrojs/vercel')).default() : undefined,
   integrations: [
     react(),
     tailwind()
