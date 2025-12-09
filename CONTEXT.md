@@ -11,7 +11,13 @@ Aplicacion web para trackear partidas de Age of Empires 3 entre amigos con siste
 - **bcryptjs** - Hashing de passwords
 - **Canvas API** - Generacion de memes
 
-## Estructura de Archivos
+
+
+
+
+
+## Estructura de Archivosss
+
 
 ```
 src/
