@@ -9,19 +9,20 @@ const currentUser = Astro.locals.user;
 const userIsAdmin = isAdmin(currentUser);
 
 // Ahora players = users
-const players = db.users.findAll();
+const players = await db.users.findAllPlayers();
 
-const playersWithStats = players.map(player => {
-  const participations = db.participants.findByPlayerId(player.id);
+const playersWithStats = [];
+for (const player of players) {
+  const participations = await db.participants.findByPlayerId(player.id);
   const wins = participations.filter(p => p.isWinner).length;
   const favCiv = getCivilization(player.favoriteCiv);
-  return {
+  playersWithStats.push({
     ...player,
     totalMatches: participations.length,
     wins,
     civFlag: favCiv?.flag || '⚔️'
-  };
-});
+  });
+}
 ---
 
 <Layout title="Jugadores">

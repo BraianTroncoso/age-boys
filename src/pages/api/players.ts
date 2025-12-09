@@ -22,7 +22,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Verificar si ya existe un usuario con ese nombre
-    if (db.users.findByUsername(name.trim())) {
+    const existingUser = await db.users.findByUsername(name.trim());
+    if (existingUser) {
       return new Response(JSON.stringify({ success: false, error: 'Ya existe un jugador con ese nombre' }), {
         status: 400, headers: { 'Content-Type': 'application/json' },
       });
@@ -30,7 +31,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Crear usuario invitado con password temporal
     const passwordHash = await hashPassword('guest123');
-    const player = db.users.create({
+    const player = await db.users.create({
       username: name.trim(),
       passwordHash,
       favoriteCiv: 'spanish'
@@ -50,7 +51,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 // GET: Obtener todos los jugadores (usuarios)
 export const GET: APIRoute = async () => {
   try {
-    const players = db.users.findAll();
+    const players = await db.users.findAll();
     return new Response(JSON.stringify({ success: true, players }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });

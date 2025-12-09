@@ -1,199 +1,249 @@
-import * as fs from 'fs';
-import * as path from 'path';
+import { createClient } from '@libsql/client';
 
-// Simple JSON-based database that works everywhere
-const DB_PATH = './data/aoe3.json';
+// Turso client
+const client = createClient({
+  url: import.meta.env.TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL || '',
+  authToken: import.meta.env.TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '',
+});
 
-// Usuario = Jugador (fusionados)
+// Interfaces
 interface User {
   id: number;
   username: string;
   passwordHash: string;
-  favoriteCiv: string;     // Civilización favorita
-  eloRating: number;       // ELO 1v1
-  eloTeams: number;        // ELO equipos
-  eloFfa: number;          // ELO FFA
-  createdAt: Date;
+  favoriteCiv: string;
+  eloRating: number;
+  eloTeams: number;
+  eloFfa: number;
+  isAdmin: number;
+  createdAt: string;
 }
 
 interface Match {
   id: number;
   matchType: string;
-  playedAt: Date;
-  createdBy?: number;
-  createdAt: Date;
+  playedAt: string;
+  createdBy: number | null;
+  createdAt: string;
 }
 
 interface MatchParticipant {
   id: number;
   matchId: number;
-  playerId: number;    // Referencia a User.id (usuario = jugador)
+  playerId: number;
   team: number | null;
   civilization: string;
   isWinner: boolean;
   eloChange: number;
 }
 
-interface Database {
-  users: User[];
-  matches: Match[];
-  matchParticipants: MatchParticipant[];
-  _counters: {
-    users: number;
-    matches: number;
-    matchParticipants: number;
-  };
+// Initialize tables
+async function initTables() {
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT UNIQUE NOT NULL,
+      passwordHash TEXT NOT NULL,
+      favoriteCiv TEXT DEFAULT 'spanish',
+      eloRating REAL DEFAULT 1000,
+      eloTeams REAL DEFAULT 1000,
+      eloFfa REAL DEFAULT 1000,
+      isAdmin INTEGER DEFAULT 0,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS matches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      matchType TEXT NOT NULL,
+      createdBy INTEGER,
+      playedAt TEXT DEFAULT CURRENT_TIMESTAMP,
+      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+
+  await client.execute(`
+    CREATE TABLE IF NOT EXISTS match_participants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      matchId INTEGER NOT NULL,
+      playerId INTEGER NOT NULL,
+      team INTEGER,
+      civilization TEXT,
+      isWinner INTEGER DEFAULT 0,
+      eloChange REAL DEFAULT 0
+    )
+  `);
 }
 
-function ensureDir() {
-  const dir = path.dirname(DB_PATH);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+// Initialize on first import
+let initialized = false;
+async function ensureInit() {
+  if (!initialized) {
+    await initTables();
+    initialized = true;
   }
-}
-
-function loadDb(): Database {
-  ensureDir();
-  if (!fs.existsSync(DB_PATH)) {
-    const initial: Database = {
-      users: [],
-      matches: [],
-      matchParticipants: [],
-      _counters: { users: 0, matches: 0, matchParticipants: 0 }
-    };
-    fs.writeFileSync(DB_PATH, JSON.stringify(initial, null, 2));
-    return initial;
-  }
-  const data = JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
-  // Migración: si existe players pero no tiene los nuevos campos en users, migrar
-  if (data.players && !data._counters.hasOwnProperty('players') === false) {
-    // Mantener compatibilidad con DB antigua
-    if (!data._counters.matchParticipants) {
-      data._counters.matchParticipants = data._counters.players || 0;
-    }
-  }
-  return data;
-}
-
-function saveDb(data: Database) {
-  ensureDir();
-  fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 }
 
 // Database operations
 export const db = {
-  // Users (Usuario = Jugador)
   users: {
-    findAll: (): User[] => {
-      const data = loadDb();
-      return [...data.users].sort((a, b) => b.eloRating - a.eloRating);
+    findAll: async (): Promise<User[]> => {
+      await ensureInit();
+      const result = await client.execute('SELECT * FROM users ORDER BY eloRating DESC');
+      return result.rows as unknown as User[];
     },
-    findByUsername: (username: string): User | undefined => {
-      const data = loadDb();
-      return data.users.find(u => u.username === username);
+    findAllPlayers: async (): Promise<User[]> => {
+      await ensureInit();
+      // Excluir admin del ranking
+      const result = await client.execute("SELECT * FROM users WHERE username != 'admin' ORDER BY eloRating DESC");
+      return result.rows as unknown as User[];
     },
-    findById: (id: number): User | undefined => {
-      const data = loadDb();
-      return data.users.find(u => u.id === id);
+    findByUsername: async (username: string): Promise<User | undefined> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'SELECT * FROM users WHERE username = ?',
+        args: [username]
+      });
+      return result.rows[0] as unknown as User | undefined;
     },
-    create: (user: Omit<User, 'id' | 'createdAt' | 'eloRating' | 'eloTeams' | 'eloFfa'>): User => {
-      const data = loadDb();
-      const newUser: User = {
-        ...user,
-        id: ++data._counters.users,
-        eloRating: 1000,
-        eloTeams: 1000,
-        eloFfa: 1000,
-        createdAt: new Date()
-      };
-      data.users.push(newUser);
-      saveDb(data);
-      return newUser;
+    findById: async (id: number): Promise<User | undefined> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'SELECT * FROM users WHERE id = ?',
+        args: [id]
+      });
+      return result.rows[0] as unknown as User | undefined;
     },
-    update: (id: number, updates: Partial<User>) => {
-      const data = loadDb();
-      const index = data.users.findIndex(u => u.id === id);
-      if (index !== -1) {
-        data.users[index] = { ...data.users[index], ...updates };
-        saveDb(data);
+    create: async (user: { username: string; passwordHash: string; favoriteCiv: string }): Promise<User> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'INSERT INTO users (username, passwordHash, favoriteCiv) VALUES (?, ?, ?) RETURNING *',
+        args: [user.username, user.passwordHash, user.favoriteCiv]
+      });
+      return result.rows[0] as unknown as User;
+    },
+    update: async (id: number, updates: Partial<User>) => {
+      await ensureInit();
+      const fields: string[] = [];
+      const values: any[] = [];
+
+      if (updates.favoriteCiv !== undefined) {
+        fields.push('favoriteCiv = ?');
+        values.push(updates.favoriteCiv);
+      }
+      if (updates.eloRating !== undefined) {
+        fields.push('eloRating = ?');
+        values.push(updates.eloRating);
+      }
+      if (updates.eloTeams !== undefined) {
+        fields.push('eloTeams = ?');
+        values.push(updates.eloTeams);
+      }
+      if (updates.eloFfa !== undefined) {
+        fields.push('eloFfa = ?');
+        values.push(updates.eloFfa);
+      }
+      if (updates.isAdmin !== undefined) {
+        fields.push('isAdmin = ?');
+        values.push(updates.isAdmin);
+      }
+
+      if (fields.length > 0) {
+        values.push(id);
+        await client.execute({
+          sql: `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
+          args: values
+        });
       }
     }
   },
 
-  // Alias: players apunta a users para compatibilidad
+  // Alias for compatibility
   players: {
-    findAll: (): User[] => {
-      const data = loadDb();
-      return [...data.users].sort((a, b) => b.eloRating - a.eloRating);
+    findAll: async (): Promise<User[]> => {
+      return db.users.findAll();
     },
-    findById: (id: number): User | undefined => {
-      const data = loadDb();
-      return data.users.find(u => u.id === id);
+    findById: async (id: number): Promise<User | undefined> => {
+      return db.users.findById(id);
     },
-    findByName: (name: string): User | undefined => {
-      const data = loadDb();
-      return data.users.find(u => u.username === name);
+    findByName: async (name: string): Promise<User | undefined> => {
+      return db.users.findByUsername(name);
     },
-    update: (id: number, updates: Partial<User>) => {
-      const data = loadDb();
-      const index = data.users.findIndex(u => u.id === id);
-      if (index !== -1) {
-        data.users[index] = { ...data.users[index], ...updates };
-        saveDb(data);
-      }
+    update: async (id: number, updates: Partial<User>) => {
+      return db.users.update(id, updates);
     }
   },
 
-  // Matches
   matches: {
-    findAll: (): Match[] => {
-      const data = loadDb();
-      return [...data.matches].sort((a, b) =>
-        new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()
-      );
+    findAll: async (): Promise<Match[]> => {
+      await ensureInit();
+      const result = await client.execute('SELECT * FROM matches ORDER BY playedAt DESC');
+      return result.rows as unknown as Match[];
     },
-    findById: (id: number): Match | undefined => {
-      const data = loadDb();
-      return data.matches.find(m => m.id === id);
+    findById: async (id: number): Promise<Match | undefined> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'SELECT * FROM matches WHERE id = ?',
+        args: [id]
+      });
+      return result.rows[0] as unknown as Match | undefined;
     },
-    create: (match: Omit<Match, 'id' | 'createdAt' | 'playedAt'>): Match => {
-      const data = loadDb();
-      const newMatch: Match = {
-        ...match,
-        id: ++data._counters.matches,
-        playedAt: new Date(),
-        createdAt: new Date()
-      };
-      data.matches.push(newMatch);
-      saveDb(data);
-      return newMatch;
+    create: async (match: { matchType: string; createdBy?: number }): Promise<Match> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'INSERT INTO matches (matchType, createdBy) VALUES (?, ?) RETURNING *',
+        args: [match.matchType, match.createdBy || null]
+      });
+      return result.rows[0] as unknown as Match;
     }
   },
 
-  // Match Participants
   participants: {
-    findByMatchId: (matchId: number): MatchParticipant[] => {
-      const data = loadDb();
-      return data.matchParticipants.filter(p => p.matchId === matchId);
+    findByMatchId: async (matchId: number): Promise<MatchParticipant[]> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'SELECT * FROM match_participants WHERE matchId = ?',
+        args: [matchId]
+      });
+      return result.rows.map(row => ({
+        ...row,
+        isWinner: Boolean(row.isWinner)
+      })) as unknown as MatchParticipant[];
     },
-    findByPlayerId: (playerId: number): MatchParticipant[] => {
-      const data = loadDb();
-      return data.matchParticipants.filter(p => p.playerId === playerId);
+    findByPlayerId: async (playerId: number): Promise<MatchParticipant[]> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'SELECT * FROM match_participants WHERE playerId = ?',
+        args: [playerId]
+      });
+      return result.rows.map(row => ({
+        ...row,
+        isWinner: Boolean(row.isWinner)
+      })) as unknown as MatchParticipant[];
     },
-    create: (participant: Omit<MatchParticipant, 'id'>): MatchParticipant => {
-      const data = loadDb();
-      const newParticipant: MatchParticipant = {
-        ...participant,
-        id: ++data._counters.matchParticipants
-      };
-      data.matchParticipants.push(newParticipant);
-      saveDb(data);
-      return newParticipant;
+    create: async (participant: Omit<MatchParticipant, 'id'>): Promise<MatchParticipant> => {
+      await ensureInit();
+      const result = await client.execute({
+        sql: 'INSERT INTO match_participants (matchId, playerId, team, civilization, isWinner, eloChange) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
+        args: [
+          participant.matchId,
+          participant.playerId,
+          participant.team,
+          participant.civilization,
+          participant.isWinner ? 1 : 0,
+          participant.eloChange
+        ]
+      });
+      const row = result.rows[0] as any;
+      return {
+        ...row,
+        isWinner: Boolean(row.isWinner)
+      } as MatchParticipant;
     }
   }
 };
 
 // Type exports
 export type { User, Match, MatchParticipant };
-// Alias Player = User para compatibilidad
 export type Player = User;

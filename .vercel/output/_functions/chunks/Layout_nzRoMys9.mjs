@@ -1,0 +1,31 @@
+import { e as createComponent, f as createAstro, p as renderHead, q as renderSlot, r as renderTemplate } from './astro/server_Ctxpu_nC.mjs';
+import 'piccolore';
+import 'clsx';
+/* empty css                                */
+
+const $$Astro = createAstro();
+const $$Layout = createComponent(($$result, $$props, $$slots) => {
+  const Astro2 = $$result.createAstro($$Astro, $$props, $$slots);
+  Astro2.self = $$Layout;
+  const { title } = Astro2.props;
+  const user = Astro2.locals.user;
+  return renderTemplate`<html lang="es"> <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><link rel="icon" type="image/svg+xml" href="/favicon.svg"><title>${title} | AoE3 Tracker</title>${renderHead()}</head> <body class="min-h-screen flex flex-col"> ${user && renderTemplate`<nav class="border-b-2 border-aoe-gold bg-aoe-darker/80 backdrop-blur-sm sticky top-0 z-50"> <div class="max-w-7xl mx-auto px-4 py-3"> <div class="flex items-center justify-between"> <a href="/" class="flex items-center gap-3"> <span class="text-2xl">⚔️</span> <span class="aoe-title text-xl">AoE3 Tracker</span> </a> <div class="flex items-center gap-6"> <a href="/" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+Rankings
+</a> <a href="/matches" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+Partidas
+</a> <a href="/matches/new" class="text-aoe-cream hover:text-aoe-gold transition-colors">
++ Nueva
+</a> <a href="/players" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+Jugadores
+</a> <a href="/head-to-head" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+H2H
+</a> <a href="/ruleta" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+Ruleta
+</a> <a href="/reglas" class="text-aoe-cream hover:text-aoe-gold transition-colors">
+Reglas
+</a> <div class="flex items-center gap-3 ml-4 pl-4 border-l border-aoe-gold/30"> <a href="/profile" class="text-aoe-cream hover:text-aoe-gold text-sm transition-colors"> ${user.username} </a> <a href="/api/auth/logout" class="text-aoe-red hover:text-red-400 text-sm transition-colors">
+Salir
+</a> </div> </div> </div> </div> </nav>`} <main class="max-w-7xl mx-auto px-4 py-8 flex-grow"> ${renderSlot($$result, $$slots["default"])} </main> <footer class="border-t border-aoe-gold/20 py-1 text-center"> <span class="text-[10px] text-aoe-cream-dark/40">⚜ AoE3 Tracker · Para los boys ⚜</span> </footer> </body></html>`;
+}, "C:/Users/tronc/OneDrive/Escritorio/proyects/proyect-two/age-boys/src/layouts/Layout.astro", void 0);
+
+export { $$Layout as $ };

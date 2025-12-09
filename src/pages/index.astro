@@ -5,11 +5,12 @@ import { getRatingTier, getTierColor } from '../lib/elo';
 import { getCivilizationName, getCivilizationFlag } from '../lib/civilizations';
 import { getWeeklyLoser } from '../lib/stats';
 
-const players = db.users.findAll();
-const matches = db.matches.findAll().slice(0, 5);
+const players = await db.users.findAllPlayers();
+const allMatchesRaw = await db.matches.findAll();
+const matches = allMatchesRaw.slice(0, 5);
 
 // El boludo de la semana
-const weeklyLoser = getWeeklyLoser();
+const weeklyLoser = await getWeeklyLoser();
 
 // El rey del ranking
 const topPlayer = players.length > 0 ? players[0] : null;
@@ -17,12 +18,11 @@ const topPlayer = players.length > 0 ? players[0] : null;
 // Calcular stats del top player
 let topPlayerStats = null;
 if (topPlayer) {
-  const allMatches = db.matches.findAll();
   let wins = 0;
   let losses = 0;
 
-  for (const match of allMatches) {
-    const participants = db.participants.findByMatchId(match.id);
+  for (const match of allMatchesRaw) {
+    const participants = await db.participants.findByMatchId(match.id);
     const playerParticipant = participants.find(p => p.playerId === topPlayer.id);
     if (playerParticipant) {
       if (playerParticipant.isWinner) wins++;
@@ -58,16 +58,16 @@ const frasesTop = [
 
 const fraseRandom = frasesTop[Math.floor(Math.random() * frasesTop.length)];
 
-const matchesWithParticipants = matches.map(match => {
-  const participants = db.participants.findByMatchId(match.id).map(p => {
-    const player = db.users.findById(p.playerId);
-    return {
-      ...p,
-      playerName: player?.username || 'Unknown'
-    };
-  });
-  return { ...match, participants };
-});
+const matchesWithParticipants = [];
+for (const match of matches) {
+  const rawParticipants = await db.participants.findByMatchId(match.id);
+  const participants = [];
+  for (const p of rawParticipants) {
+    const player = await db.users.findById(p.playerId);
+    participants.push({ ...p, playerName: player?.username || 'Unknown' });
+  }
+  matchesWithParticipants.push({ ...match, participants });
+}
 ---
 
 <Layout title="Rankings">

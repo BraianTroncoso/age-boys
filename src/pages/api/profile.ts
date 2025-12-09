@@ -21,7 +21,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    db.users.update(user.id, { favoriteCiv });
+    await db.users.update(user.id, { favoriteCiv });
 
     return new Response(JSON.stringify({ success: true }), {
       status: 200,

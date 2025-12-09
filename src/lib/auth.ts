@@ -15,28 +15,26 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 export async function createUser(username: string, password: string, favoriteCiv: string = 'spanish') {
   const passwordHash = await hashPassword(password);
 
-  // Check if user exists
-  const existing = db.users.findByUsername(username);
+  const existing = await db.users.findByUsername(username);
   if (existing) {
     return { success: false, error: 'El usuario ya existe' };
   }
 
   try {
-    const user = db.users.create({ username, passwordHash, favoriteCiv });
+    const user = await db.users.create({ username, passwordHash, favoriteCiv });
     return { success: true, user };
   } catch (error: any) {
     return { success: false, error: 'Error al crear usuario' };
   }
 }
 
-// Verificar si un usuario es admin
 export function isAdmin(user: { username: string } | null): boolean {
   if (!user) return false;
   return user.username === 'admin';
 }
 
 export async function authenticateUser(username: string, password: string) {
-  const user = db.users.findByUsername(username);
+  const user = await db.users.findByUsername(username);
 
   if (!user) {
     return { success: false, error: 'Usuario no encontrado' };
@@ -83,9 +81,9 @@ export function getSessionFromCookies(cookieHeader: string | null): { userId: nu
   return parseSession(sessionToken);
 }
 
-export function getUserFromSession(session: { userId: number } | null) {
+export async function getUserFromSession(session: { userId: number } | null) {
   if (!session) return null;
-  return db.users.findById(session.userId) || null;
+  return await db.users.findById(session.userId) || null;
 }
 
 export { SESSION_COOKIE };

@@ -22,7 +22,8 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Validate all players exist
     for (const p of participants) {
-      if (!db.players.findById(p.playerId)) {
+      const user = await db.users.findById(p.playerId);
+      if (!user) {
         return new Response(JSON.stringify({ success: false, error: `Jugador con ID ${p.playerId} no encontrado` }), {
           status: 400, headers: { 'Content-Type': 'application/json' },
         });
@@ -30,64 +31,97 @@ export const POST: APIRoute = async ({ request, locals }) => {
     }
 
     // Create match
-    const match = db.matches.create({ matchType, createdBy: locals.user?.id });
+    const match = await db.matches.create({ matchType, createdBy: locals.user?.id });
     const eloChanges: Map<number, number> = new Map();
 
     if (matchType === '1v1') {
       const winner = participants.find(p => p.isWinner)!;
       const loser = participants.find(p => !p.isWinner)!;
-      const winnerPlayer = db.players.findById(winner.playerId)!;
-      const loserPlayer = db.players.findById(loser.playerId)!;
+      const winnerPlayer = await db.users.findById(winner.playerId);
+      const loserPlayer = await db.users.findById(loser.playerId);
+
+      if (!winnerPlayer || !loserPlayer) {
+        return new Response(JSON.stringify({ success: false, error: 'Jugadores no encontrados' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
 
       const { winnerChange, loserChange } = calculate1v1Elo(winnerPlayer.eloRating, loserPlayer.eloRating);
       eloChanges.set(winner.playerId, winnerChange);
       eloChanges.set(loser.playerId, loserChange);
 
-      db.players.update(winner.playerId, { eloRating: winnerPlayer.eloRating + winnerChange });
-      db.players.update(loser.playerId, { eloRating: loserPlayer.eloRating + loserChange });
+      await db.users.update(winner.playerId, { eloRating: winnerPlayer.eloRating + winnerChange });
+      await db.users.update(loser.playerId, { eloRating: loserPlayer.eloRating + loserChange });
 
     } else if (['2v2', '3v3', '4v4'].includes(matchType)) {
       const winners = participants.filter(p => p.isWinner);
       const losers = participants.filter(p => !p.isWinner);
 
-      const winnerRatings = winners.map(w => db.players.findById(w.playerId)!.eloTeams);
-      const loserRatings = losers.map(l => db.players.findById(l.playerId)!.eloTeams);
+      const winnerRatings: number[] = [];
+      const loserRatings: number[] = [];
+
+      for (const w of winners) {
+        const player = await db.users.findById(w.playerId);
+        if (player) winnerRatings.push(player.eloTeams);
+      }
+
+      for (const l of losers) {
+        const player = await db.users.findById(l.playerId);
+        if (player) loserRatings.push(player.eloTeams);
+      }
 
       const { winnerChanges, loserChanges } = calculateTeamElo(winnerRatings, loserRatings);
 
-      winners.forEach((w, i) => {
-        eloChanges.set(w.playerId, winnerChanges[i]);
-        const player = db.players.findById(w.playerId)!;
-        db.players.update(w.playerId, { eloTeams: player.eloTeams + winnerChanges[i] });
-      });
+      for (let i = 0; i < winners.length; i++) {
+        eloChanges.set(winners[i].playerId, winnerChanges[i]);
+        const player = await db.users.findById(winners[i].playerId);
+        if (player) {
+          await db.users.update(winners[i].playerId, { eloTeams: player.eloTeams + winnerChanges[i] });
+        }
+      }
 
-      losers.forEach((l, i) => {
-        eloChanges.set(l.playerId, loserChanges[i]);
-        const player = db.players.findById(l.playerId)!;
-        db.players.update(l.playerId, { eloTeams: player.eloTeams + loserChanges[i] });
-      });
+      for (let i = 0; i < losers.length; i++) {
+        eloChanges.set(losers[i].playerId, loserChanges[i]);
+        const player = await db.users.findById(losers[i].playerId);
+        if (player) {
+          await db.users.update(losers[i].playerId, { eloTeams: player.eloTeams + loserChanges[i] });
+        }
+      }
 
     } else if (matchType === 'ffa') {
       const winner = participants.find(p => p.isWinner)!;
       const losers = participants.filter(p => !p.isWinner);
-      const winnerPlayer = db.players.findById(winner.playerId)!;
-      const loserRatings = losers.map(l => db.players.findById(l.playerId)!.eloFfa);
+      const winnerPlayer = await db.users.findById(winner.playerId);
+
+      if (!winnerPlayer) {
+        return new Response(JSON.stringify({ success: false, error: 'Ganador no encontrado' }), {
+          status: 400, headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      const loserRatings: number[] = [];
+      for (const l of losers) {
+        const player = await db.users.findById(l.playerId);
+        if (player) loserRatings.push(player.eloFfa);
+      }
 
       const { winnerChange, loserChanges } = calculateFfaElo(winnerPlayer.eloFfa, loserRatings);
 
       eloChanges.set(winner.playerId, winnerChange);
-      db.players.update(winner.playerId, { eloFfa: winnerPlayer.eloFfa + winnerChange });
+      await db.users.update(winner.playerId, { eloFfa: winnerPlayer.eloFfa + winnerChange });
 
-      losers.forEach((l, i) => {
-        eloChanges.set(l.playerId, loserChanges[i]);
-        const player = db.players.findById(l.playerId)!;
-        db.players.update(l.playerId, { eloFfa: player.eloFfa + loserChanges[i] });
-      });
+      for (let i = 0; i < losers.length; i++) {
+        eloChanges.set(losers[i].playerId, loserChanges[i]);
+        const player = await db.users.findById(losers[i].playerId);
+        if (player) {
+          await db.users.update(losers[i].playerId, { eloFfa: player.eloFfa + loserChanges[i] });
+        }
+      }
     }
 
     // Insert participants
     for (const p of participants) {
-      db.participants.create({
+      await db.participants.create({
         matchId: match.id,
         playerId: p.playerId,
         team: p.team,

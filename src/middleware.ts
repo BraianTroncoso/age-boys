@@ -12,7 +12,7 @@ export const onRequest = defineMiddleware(async (context, next) => {
 
   const cookieHeader = context.request.headers.get('cookie');
   const session = getSessionFromCookies(cookieHeader);
-  const user = getUserFromSession(session);
+  const user = await getUserFromSession(session);
 
   context.locals.user = user;
 

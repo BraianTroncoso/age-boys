@@ -65,11 +65,11 @@ export function getFrasesBoludoSemana(): string[] {
 /**
  * Obtiene el boludo de la semana (más derrotas en los últimos 7 días)
  */
-export function getWeeklyLoser() {
+export async function getWeeklyLoser() {
   const oneWeekAgo = new Date();
   oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
 
-  const allMatches = db.matches.findAll();
+  const allMatches = await db.matches.findAll();
   const recentMatches = allMatches.filter(m => new Date(m.playedAt) >= oneWeekAgo);
 
   if (recentMatches.length === 0) return null;
@@ -79,7 +79,7 @@ export function getWeeklyLoser() {
   const winCount: Record<number, number> = {};
 
   for (const match of recentMatches) {
-    const participants = db.participants.findByMatchId(match.id);
+    const participants = await db.participants.findByMatchId(match.id);
     for (const p of participants) {
       if (!lossCount[p.playerId]) lossCount[p.playerId] = 0;
       if (!winCount[p.playerId]) winCount[p.playerId] = 0;
@@ -92,11 +92,15 @@ export function getWeeklyLoser() {
     }
   }
 
-  // Encontrar el que más perdió
+  // Encontrar el que más perdió (excluyendo admin)
   let maxLosses = 0;
   let loserId: number | null = null;
 
   for (const [playerId, losses] of Object.entries(lossCount)) {
+    const player = await db.users.findById(parseInt(playerId));
+    // Excluir admin del boludo de la semana
+    if (player && player.username === 'admin') continue;
+
     if (losses > maxLosses) {
       maxLosses = losses;
       loserId = parseInt(playerId);
@@ -105,7 +109,7 @@ export function getWeeklyLoser() {
 
   if (!loserId || maxLosses === 0) return null;
 
-  const loser = db.users.findById(loserId);
+  const loser = await db.users.findById(loserId);
   if (!loser) return null;
 
   return {
@@ -119,14 +123,14 @@ export function getWeeklyLoser() {
 /**
  * Obtiene la racha actual del jugador
  */
-export function getPlayerStreak(playerId: number) {
-  const allMatches = db.matches.findAll();
+export async function getPlayerStreak(playerId: number) {
+  const allMatches = await db.matches.findAll();
 
   // Obtener partidas del jugador ordenadas por fecha (más reciente primero)
   const playerMatches: { matchId: number; playedAt: Date; isWinner: boolean }[] = [];
 
   for (const match of allMatches) {
-    const participants = db.participants.findByMatchId(match.id);
+    const participants = await db.participants.findByMatchId(match.id);
     const playerPart = participants.find(p => p.playerId === playerId);
     if (playerPart) {
       playerMatches.push({
@@ -178,14 +182,14 @@ export function getPlayerStreak(playerId: number) {
 /**
  * Obtiene némesis y víctima del jugador (solo 1v1)
  */
-export function getNemesisAndVictim(playerId: number) {
-  const allMatches = db.matches.findAll().filter(m => m.matchType === '1v1');
+export async function getNemesisAndVictim(playerId: number) {
+  const allMatches = (await db.matches.findAll()).filter(m => m.matchType === '1v1');
 
   // Record de victorias/derrotas contra cada oponente
   const record: Record<number, { wins: number; losses: number; opponentName: string }> = {};
 
   for (const match of allMatches) {
-    const participants = db.participants.findByMatchId(match.id);
+    const participants = await db.participants.findByMatchId(match.id);
     const playerPart = participants.find(p => p.playerId === playerId);
 
     if (!playerPart) continue;
@@ -194,7 +198,7 @@ export function getNemesisAndVictim(playerId: number) {
     if (!opponent) continue;
 
     if (!record[opponent.playerId]) {
-      const opponentUser = db.users.findById(opponent.playerId);
+      const opponentUser = await db.users.findById(opponent.playerId);
       record[opponent.playerId] = {
         wins: 0,
         losses: 0,
@@ -247,19 +251,15 @@ export function getNemesisAndVictim(playerId: number) {
 /**
  * Obtiene estadísticas completas del jugador
  */
-export function getPlayerFullStats(playerId: number) {
-  const allMatches = db.matches.findAll();
+export async function getPlayerFullStats(playerId: number) {
+  const allMatches = await db.matches.findAll();
   let totalWins = 0;
   let totalLosses = 0;
-  let maxWinStreak = 0;
-  let maxLossStreak = 0;
-  let currentStreak = 0;
-  let lastResult: boolean | null = null;
 
   const matchHistory: { playedAt: Date; isWinner: boolean }[] = [];
 
   for (const match of allMatches) {
-    const participants = db.participants.findByMatchId(match.id);
+    const participants = await db.participants.findByMatchId(match.id);
     const playerPart = participants.find(p => p.playerId === playerId);
 
     if (playerPart) {
@@ -280,6 +280,8 @@ export function getPlayerFullStats(playerId: number) {
   matchHistory.sort((a, b) => a.playedAt.getTime() - b.playedAt.getTime());
 
   // Calcular rachas máximas
+  let maxWinStreak = 0;
+  let maxLossStreak = 0;
   let winStreak = 0;
   let lossStreak = 0;
 
