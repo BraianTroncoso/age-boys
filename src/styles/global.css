@@ -1,0 +1,215 @@
+@import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --aoe-dark: #1a1209;
+  --aoe-darker: #0f0a05;
+  --aoe-brown: #2d1f0f;
+  --aoe-brown-light: #3d2a15;
+  --aoe-gold: #c9a227;
+  --aoe-gold-light: #d4af37;
+  --aoe-gold-dark: #a68419;
+  --aoe-cream: #f5e6c8;
+  --aoe-cream-dark: #e8d5b0;
+  --aoe-red: #8b0000;
+  --aoe-green: #006400;
+}
+
+body {
+  font-family: 'Georgia', serif;
+  background: linear-gradient(135deg, var(--aoe-darker) 0%, var(--aoe-dark) 50%, var(--aoe-brown) 100%);
+  color: var(--aoe-cream);
+  min-height: 100vh;
+}
+
+/* AoE3 Style Components */
+@layer components {
+  /* Gold ornamental border */
+  .aoe-border {
+    @apply border-2 border-aoe-gold rounded-sm;
+    box-shadow:
+      0 0 10px rgba(201, 162, 39, 0.3),
+      inset 0 0 20px rgba(0, 0, 0, 0.5);
+  }
+
+  /* Card style like unit cards */
+  .aoe-card {
+    @apply bg-gradient-to-b from-aoe-brown to-aoe-dark p-4 rounded-sm;
+    border: 3px solid var(--aoe-gold);
+    box-shadow:
+      0 4px 20px rgba(0, 0, 0, 0.5),
+      0 0 15px rgba(201, 162, 39, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  }
+
+  /* Button style */
+  .aoe-btn {
+    @apply px-6 py-2 font-cinzel font-semibold text-aoe-cream uppercase tracking-wider;
+    background: linear-gradient(180deg, var(--aoe-brown-light) 0%, var(--aoe-brown) 50%, var(--aoe-dark) 100%);
+    border: 2px solid var(--aoe-gold);
+    box-shadow:
+      0 2px 10px rgba(0, 0, 0, 0.5),
+      inset 0 1px 0 rgba(255, 255, 255, 0.1);
+    transition: all 0.2s ease;
+  }
+
+  .aoe-btn:hover {
+    background: linear-gradient(180deg, var(--aoe-gold-dark) 0%, var(--aoe-brown-light) 50%, var(--aoe-brown) 100%);
+    box-shadow:
+      0 2px 15px rgba(201, 162, 39, 0.4),
+      inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    transform: translateY(-1px);
+  }
+
+  .aoe-btn:active {
+    transform: translateY(1px);
+    box-shadow:
+      0 1px 5px rgba(0, 0, 0, 0.5),
+      inset 0 2px 5px rgba(0, 0, 0, 0.3);
+  }
+
+  .aoe-btn-primary {
+    @apply aoe-btn;
+    background: linear-gradient(180deg, var(--aoe-gold-light) 0%, var(--aoe-gold) 50%, var(--aoe-gold-dark) 100%);
+    color: var(--aoe-dark);
+  }
+
+  .aoe-btn-primary:hover {
+    background: linear-gradient(180deg, #e5c44a 0%, var(--aoe-gold-light) 50%, var(--aoe-gold) 100%);
+  }
+
+  /* Input style */
+  .aoe-input {
+    @apply w-full px-4 py-2 bg-aoe-dark text-aoe-cream rounded-sm;
+    border: 2px solid var(--aoe-gold-dark);
+    box-shadow: inset 0 2px 10px rgba(0, 0, 0, 0.5);
+    transition: all 0.2s ease;
+  }
+
+  .aoe-input:focus {
+    outline: none;
+    border-color: var(--aoe-gold);
+    box-shadow:
+      inset 0 2px 10px rgba(0, 0, 0, 0.5),
+      0 0 10px rgba(201, 162, 39, 0.3);
+  }
+
+  .aoe-input::placeholder {
+    color: rgba(245, 230, 200, 0.5);
+  }
+
+  /* Select style */
+  .aoe-select {
+    @apply aoe-input cursor-pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%23c9a227' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+    background-position: right 0.5rem center;
+    background-repeat: no-repeat;
+    background-size: 1.5em 1.5em;
+    padding-right: 2.5rem;
+  }
+
+  /* Table style */
+  .aoe-table {
+    @apply w-full;
+  }
+
+  .aoe-table th {
+    @apply px-4 py-3 text-left font-cinzel text-aoe-gold uppercase tracking-wider text-sm;
+    background: linear-gradient(180deg, var(--aoe-brown) 0%, var(--aoe-dark) 100%);
+    border-bottom: 2px solid var(--aoe-gold);
+  }
+
+  .aoe-table td {
+    @apply px-4 py-3;
+    border-bottom: 1px solid rgba(201, 162, 39, 0.2);
+  }
+
+  .aoe-table tr:hover td {
+    background: rgba(201, 162, 39, 0.1);
+  }
+
+  /* Title style */
+  .aoe-title {
+    @apply font-cinzel text-aoe-gold font-bold tracking-wider;
+    text-shadow:
+      0 2px 4px rgba(0, 0, 0, 0.8),
+      0 0 20px rgba(201, 162, 39, 0.3);
+  }
+
+  /* Panel/Container */
+  .aoe-panel {
+    @apply p-6 rounded-sm;
+    background: linear-gradient(180deg, rgba(45, 31, 15, 0.9) 0%, rgba(26, 18, 9, 0.95) 100%);
+    border: 2px solid var(--aoe-gold);
+    box-shadow:
+      0 4px 30px rgba(0, 0, 0, 0.5),
+      0 0 20px rgba(201, 162, 39, 0.1),
+      inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  }
+
+  /* Stat box */
+  .aoe-stat {
+    @apply text-center p-3;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid var(--aoe-gold-dark);
+    border-radius: 2px;
+  }
+
+  .aoe-stat-value {
+    @apply text-2xl font-cinzel font-bold text-aoe-gold;
+  }
+
+  .aoe-stat-label {
+    @apply text-xs uppercase tracking-wider text-aoe-cream-dark mt-1;
+  }
+
+  /* Badge */
+  .aoe-badge {
+    @apply inline-flex items-center px-2 py-1 text-xs font-semibold rounded-sm;
+    border: 1px solid currentColor;
+  }
+
+  .aoe-badge-win {
+    @apply text-green-400 bg-green-900/30;
+  }
+
+  .aoe-badge-loss {
+    @apply text-red-400 bg-red-900/30;
+  }
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--aoe-dark);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--aoe-gold-dark);
+  border-radius: 2px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--aoe-gold);
+}
+
+/* Animations */
+@keyframes goldGlow {
+  0%, 100% {
+    box-shadow: 0 0 10px rgba(201, 162, 39, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(201, 162, 39, 0.5);
+  }
+}
+
+.animate-gold-glow {
+  animation: goldGlow 2s ease-in-out infinite;
+}

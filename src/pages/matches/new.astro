@@ -1,0 +1,566 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { getCivilizationName, getCivilizationFlag } from '../../lib/civilizations';
+
+const players = db.users.findAll();
+---
+
+<Layout title="Nueva Partida">
+  <div class="max-w-3xl mx-auto space-y-8">
+    <div class="text-center">
+      <h1 class="aoe-title text-3xl mb-2">Registrar Partida</h1>
+      <p class="text-aoe-cream-dark">Selecciona el tipo de partida y los participantes</p>
+    </div>
+
+    {players.length < 2 ? (
+      <div class="aoe-panel text-center py-8">
+        <span class="text-5xl mb-4 block">⚠️</span>
+        <h2 class="aoe-title text-xl mb-2">Jugadores insuficientes</h2>
+        <p class="text-aoe-cream-dark mb-4">
+          Necesitas al menos 2 jugadores para registrar una partida.
+        </p>
+        <a href="/players" class="aoe-btn-primary inline-block">
+          Agregar Jugadores
+        </a>
+      </div>
+    ) : (
+      <div class="aoe-panel">
+        <form id="matchForm" class="space-y-6">
+          <!-- Match Type -->
+          <div>
+            <label class="block text-sm font-semibold text-aoe-cream mb-3">
+              Tipo de Partida
+            </label>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <label class="cursor-pointer">
+                <input type="radio" name="matchType" value="1v1" class="peer hidden" checked />
+                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all">
+                  <span class="text-2xl block mb-1">⚔️</span>
+                  <span class="text-sm">1v1</span>
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="matchType" value="2v2" class="peer hidden" />
+                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all">
+                  <span class="text-2xl block mb-1">⚔️⚔️</span>
+                  <span class="text-sm">2v2</span>
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="matchType" value="3v3" class="peer hidden" />
+                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all">
+                  <span class="text-2xl block mb-1">⚔️⚔️⚔️</span>
+                  <span class="text-sm">3v3</span>
+                </div>
+              </label>
+              <label class="cursor-pointer">
+                <input type="radio" name="matchType" value="ffa" class="peer hidden" />
+                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all">
+                  <span class="text-2xl block mb-1">👑</span>
+                  <span class="text-sm">FFA</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Players Container -->
+          <div id="playersContainer" class="space-y-6">
+            <!-- Team 1 / Players will be inserted here by JS -->
+          </div>
+
+          <div id="formError" class="hidden text-red-400 text-sm text-center p-2 bg-red-900/20 rounded"></div>
+
+          <button type="submit" class="aoe-btn-primary w-full">
+            Registrar Partida
+          </button>
+        </form>
+      </div>
+    )}
+  </div>
+
+  <!-- Modal de Victoria/Derrota -->
+  <div id="resultModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 backdrop-blur-md bg-black/90">
+    <div class="text-center space-y-4 max-w-4xl w-full">
+      <canvas id="memeCanvas" class="mx-auto border-4 border-aoe-gold rounded-lg shadow-[0_0_50px_rgba(218,165,32,0.5)]" width="800" height="500"></canvas>
+
+      <div class="flex gap-4 justify-center">
+        <button id="downloadBtn" class="aoe-btn-primary text-lg px-8 py-3">
+          Descargar Imagen
+        </button>
+        <button id="closeModalBtn" class="aoe-btn text-lg px-8 py-3">
+          Ver Partidas
+        </button>
+      </div>
+    </div>
+  </div>
+</Layout>
+
+<script define:vars={{ players }}>
+  const form = document.getElementById('matchForm');
+  const playersContainer = document.getElementById('playersContainer');
+  const errorDiv = document.getElementById('formError');
+  const matchTypeInputs = document.querySelectorAll('input[name="matchType"]');
+
+  // Map de jugadores por ID para obtener su civilización
+  const playersMap = {};
+  players.forEach(p => {
+    playersMap[p.id] = p;
+  });
+
+  function createPlayerSelect(teamNum, playerNum, label) {
+    return `
+      <div class="space-y-2">
+        <label class="block text-sm text-aoe-cream-dark">${label}</label>
+        <select name="team${teamNum}_player${playerNum}" class="aoe-select" required>
+          <option value="">Seleccionar jugador</option>
+          ${players.map(p => `<option value="${p.id}" data-civ="${p.favoriteCiv}">${p.username}</option>`).join('')}
+        </select>
+        <div class="player-civ-display text-xs text-aoe-cream-dark/70 mt-1 hidden"></div>
+      </div>
+    `;
+  }
+
+  function updateCivDisplay(select) {
+    const display = select.parentElement.querySelector('.player-civ-display');
+    if (!display) return;
+
+    const selectedOption = select.options[select.selectedIndex];
+    if (selectedOption && selectedOption.value) {
+      const player = playersMap[parseInt(selectedOption.value)];
+      if (player && player.favoriteCiv) {
+        display.textContent = `Civilización: ${player.favoriteCiv}`;
+        display.classList.remove('hidden');
+      }
+    } else {
+      display.classList.add('hidden');
+    }
+  }
+
+  function renderMatchForm(matchType) {
+    let html = '';
+
+    if (matchType === '1v1') {
+      html = `
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="aoe-card">
+            <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Ganador</h3>
+            ${createPlayerSelect(1, 1, 'Jugador')}
+          </div>
+          <div class="aoe-card">
+            <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Perdedor</h3>
+            ${createPlayerSelect(2, 1, 'Jugador')}
+          </div>
+        </div>
+      `;
+    } else if (matchType === '2v2' || matchType === '3v3') {
+      const teamSize = matchType === '2v2' ? 2 : 3;
+      let team1Players = '';
+      let team2Players = '';
+
+      for (let i = 1; i <= teamSize; i++) {
+        team1Players += createPlayerSelect(1, i, `Jugador ${i}`);
+        team2Players += createPlayerSelect(2, i, `Jugador ${i}`);
+      }
+
+      html = `
+        <!-- Randomizer Section -->
+        <div class="aoe-card mb-6">
+          <h3 class="aoe-title text-lg mb-4">🎲 Aleatorizar Equipos</h3>
+          <div class="mb-4">
+            <label class="block text-sm text-aoe-cream-dark mb-2">Selecciona ${teamSize * 2} jugadores:</label>
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="randomPlayerSelection">
+              ${players.map(p => `
+                <label class="flex items-center gap-2 p-2 bg-aoe-dark/50 rounded cursor-pointer hover:bg-aoe-dark/70">
+                  <input type="checkbox" value="${p.id}" data-name="${p.username}" class="random-player-checkbox" />
+                  <span class="text-sm">${p.username}</span>
+                </label>
+              `).join('')}
+            </div>
+          </div>
+          <button type="button" id="randomizeBtn" class="aoe-btn w-full">
+            🎲 Generar Equipos al Azar
+          </button>
+          <div id="randomResult" class="hidden mt-4 p-3 bg-aoe-gold/10 rounded border border-aoe-gold/30">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div class="aoe-card">
+            <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Equipo Ganador</h3>
+            <div class="space-y-4">${team1Players}</div>
+          </div>
+          <div class="aoe-card">
+            <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Equipo Perdedor</h3>
+            <div class="space-y-4">${team2Players}</div>
+          </div>
+        </div>
+      `;
+    } else if (matchType === 'ffa') {
+      html = `
+        <div class="aoe-card">
+          <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Ganador</h3>
+          ${createPlayerSelect(1, 1, 'Jugador ganador')}
+        </div>
+        <div class="aoe-card">
+          <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Perdedores</h3>
+          <div id="ffaLosers" class="space-y-4">
+            ${createPlayerSelect(2, 1, 'Perdedor 1')}
+          </div>
+          <button type="button" id="addLoser" class="aoe-btn mt-4 w-full">
+            + Agregar Perdedor
+          </button>
+        </div>
+      `;
+    }
+
+    playersContainer.innerHTML = html;
+
+    // Add change listeners to show civilization
+    document.querySelectorAll('select[name^="team"]').forEach(select => {
+      select.addEventListener('change', () => updateCivDisplay(select));
+    });
+
+    // Handle team randomizer
+    if (matchType === '2v2' || matchType === '3v3') {
+      const teamSize = matchType === '2v2' ? 2 : 3;
+      const randomizeBtn = document.getElementById('randomizeBtn');
+      const randomResult = document.getElementById('randomResult');
+
+      randomizeBtn?.addEventListener('click', () => {
+        const checkboxes = document.querySelectorAll('.random-player-checkbox:checked');
+        const selectedPlayers = Array.from(checkboxes).map(cb => ({
+          id: cb.value,
+          name: cb.dataset.name
+        }));
+
+        if (selectedPlayers.length !== teamSize * 2) {
+          randomResult.innerHTML = `<p class="text-red-400">Selecciona exactamente ${teamSize * 2} jugadores</p>`;
+          randomResult.classList.remove('hidden');
+          return;
+        }
+
+        // Shuffle array
+        const shuffled = [...selectedPlayers].sort(() => Math.random() - 0.5);
+
+        // Split into teams
+        const team1 = shuffled.slice(0, teamSize);
+        const team2 = shuffled.slice(teamSize);
+
+        // Show result
+        randomResult.innerHTML = `
+          <div class="grid grid-cols-2 gap-4 text-center">
+            <div>
+              <p class="text-green-400 font-semibold mb-2">Equipo 1</p>
+              ${team1.map(p => `<p class="text-aoe-cream">${p.name}</p>`).join('')}
+            </div>
+            <div>
+              <p class="text-red-400 font-semibold mb-2">Equipo 2</p>
+              ${team2.map(p => `<p class="text-aoe-cream">${p.name}</p>`).join('')}
+            </div>
+          </div>
+          <button type="button" id="applyRandomBtn" class="aoe-btn-primary w-full mt-4">
+            Aplicar a los campos
+          </button>
+        `;
+        randomResult.classList.remove('hidden');
+
+        // Apply button
+        document.getElementById('applyRandomBtn')?.addEventListener('click', () => {
+          team1.forEach((p, i) => {
+            const select = document.querySelector(`select[name="team1_player${i + 1}"]`);
+            if (select) {
+              select.value = p.id;
+              updateCivDisplay(select);
+            }
+          });
+          team2.forEach((p, i) => {
+            const select = document.querySelector(`select[name="team2_player${i + 1}"]`);
+            if (select) {
+              select.value = p.id;
+              updateCivDisplay(select);
+            }
+          });
+          randomResult.innerHTML = '<p class="text-green-400 text-center">Equipos aplicados!</p>';
+        });
+      });
+    }
+
+    // Handle FFA add loser button
+    if (matchType === 'ffa') {
+      let loserCount = 1;
+      document.getElementById('addLoser')?.addEventListener('click', () => {
+        if (loserCount < players.length - 1) {
+          loserCount++;
+          const losersDiv = document.getElementById('ffaLosers');
+          const newLoser = document.createElement('div');
+          newLoser.innerHTML = createPlayerSelect(2, loserCount, `Perdedor ${loserCount}`);
+          losersDiv.appendChild(newLoser.firstElementChild);
+
+          // Add listener to new select
+          const newSelect = losersDiv.querySelector(`select[name="team2_player${loserCount}"]`);
+          if (newSelect) {
+            newSelect.addEventListener('change', () => updateCivDisplay(newSelect));
+          }
+        }
+      });
+    }
+  }
+
+  // Initial render
+  renderMatchForm('1v1');
+
+  // Listen for match type changes
+  matchTypeInputs.forEach(input => {
+    input.addEventListener('change', (e) => {
+      renderMatchForm(e.target.value);
+    });
+  });
+
+  // Form submission
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorDiv?.classList.add('hidden');
+
+    const formData = new FormData(form);
+    const matchType = formData.get('matchType');
+
+    const data = {
+      matchType,
+      participants: []
+    };
+
+    // Helper to get player's civilization
+    function getPlayerCiv(playerId) {
+      const player = playersMap[parseInt(playerId)];
+      return player?.favoriteCiv || 'spanish';
+    }
+
+    // Collect participants based on match type
+    if (matchType === '1v1') {
+      const p1 = formData.get('team1_player1');
+      const p2 = formData.get('team2_player1');
+      data.participants = [
+        { playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: true },
+        { playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: false },
+      ];
+    } else if (matchType === '2v2' || matchType === '3v3') {
+      const teamSize = matchType === '2v2' ? 2 : 3;
+      for (let i = 1; i <= teamSize; i++) {
+        const p1 = formData.get(`team1_player${i}`);
+        if (p1) data.participants.push({ playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: true });
+
+        const p2 = formData.get(`team2_player${i}`);
+        if (p2) data.participants.push({ playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: false });
+      }
+    } else if (matchType === 'ffa') {
+      const winner = formData.get('team1_player1');
+      data.participants.push({ playerId: parseInt(winner), civilization: getPlayerCiv(winner), team: null, isWinner: true });
+
+      // Collect all losers
+      let i = 1;
+      while (formData.get(`team2_player${i}`)) {
+        const loser = formData.get(`team2_player${i}`);
+        data.participants.push({ playerId: parseInt(loser), civilization: getPlayerCiv(loser), team: null, isWinner: false });
+        i++;
+      }
+    }
+
+    // Check for duplicate players
+    const playerIds = data.participants.map(p => p.playerId);
+    if (new Set(playerIds).size !== playerIds.length) {
+      errorDiv.textContent = 'No puedes seleccionar el mismo jugador más de una vez';
+      errorDiv?.classList.remove('hidden');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/matches', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // Obtener nombres de perdedores
+        const losers = data.participants
+          .filter(p => !p.isWinner)
+          .map(p => playersMap[p.playerId]?.username || 'Desconocido');
+
+        const winners = data.participants
+          .filter(p => p.isWinner)
+          .map(p => playersMap[p.playerId]?.username || 'Desconocido');
+
+        // Generar meme y mostrar modal
+        generateMeme(losers, winners);
+        document.getElementById('resultModal')?.classList.remove('hidden');
+      } else {
+        errorDiv.textContent = result.error || 'Error al registrar partida';
+        errorDiv?.classList.remove('hidden');
+      }
+    } catch (err) {
+      errorDiv.textContent = 'Error de conexión';
+      errorDiv?.classList.remove('hidden');
+    }
+  });
+
+  // Frases argentinas para el meme (versión picante)
+  const frasesArgentinas = [
+    "A CASA PETE",
+    "SOS UN DESASTRE HERMANO",
+    "TERRIBLE BOLUDO",
+    "QUÉ HIJO DE PUTA MALO",
+    "DEJÁ DE HACER EL RIDÍCULO",
+    "TOMATELÁ PELOTUDO",
+    "SOS MÁS MALO QUE PATEAR UN PERRO",
+    "TE COGIERON DE PARADO",
+    "TE ROMPIERON EL ORTO",
+    "ANDÁ A CAGAR FLACO",
+    "LA CONCHA DE TU MADRE",
+    "QUÉ VERGÜENZA PAPÁ",
+    "NI EN PEDO VOLVÉS A GANAR",
+    "CHUPAME LA PIJA",
+    "QUÉ MAL QUE JUGÁS DIOS MÍO",
+    "SOS UN QUESO TERRIBLE",
+    "TE GARCHARON AMIGO",
+    "SACATE LA CAMISETA PETE",
+    "VOLVÉ A LA B MOGÓLICO",
+    "ANDÁ A JUGAR A LA PLAY NENE",
+  ];
+
+  const subFrases = [
+    "Sos un desastre con patas",
+    "Ni tu vieja te banca jugando",
+    "La próxima jugá al solitario mejor",
+    "Tu civilización te repudia",
+    "Hasta un pibe de 5 años te gana",
+    "Dejá el mouse y andá a terapia",
+    "Sos más manco que el manco de lepanto",
+    "Meté F10 F10 y dejá de joder",
+    "Sos tan malo que das ternura",
+    "Tu teclado se quiere suicidar",
+    "Ni con walls te salvás crack",
+    "Dale la PC a alguien que sepa",
+  ];
+
+  function generateMeme(losers, winners) {
+    const canvas = document.getElementById('memeCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Fondo degradado oscuro
+    const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+    gradient.addColorStop(0, '#1a0f0a');
+    gradient.addColorStop(0.5, '#2d1810');
+    gradient.addColorStop(1, '#1a0f0a');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    // Borde dorado
+    ctx.strokeStyle = '#DAA520';
+    ctx.lineWidth = 8;
+    ctx.strokeRect(4, 4, canvas.width - 8, canvas.height - 8);
+
+    // Borde interior
+    ctx.strokeStyle = '#8B6914';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(15, 15, canvas.width - 30, canvas.height - 30);
+
+    // Decoración de esquinas
+    const cornerSize = 30;
+    ctx.fillStyle = '#DAA520';
+    // Esquinas decorativas
+    ctx.beginPath();
+    ctx.moveTo(15, 15);
+    ctx.lineTo(15 + cornerSize, 15);
+    ctx.lineTo(15, 15 + cornerSize);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(canvas.width - 15, 15);
+    ctx.lineTo(canvas.width - 15 - cornerSize, 15);
+    ctx.lineTo(canvas.width - 15, 15 + cornerSize);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(15, canvas.height - 15);
+    ctx.lineTo(15 + cornerSize, canvas.height - 15);
+    ctx.lineTo(15, canvas.height - 15 - cornerSize);
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.moveTo(canvas.width - 15, canvas.height - 15);
+    ctx.lineTo(canvas.width - 15 - cornerSize, canvas.height - 15);
+    ctx.lineTo(canvas.width - 15, canvas.height - 15 - cornerSize);
+    ctx.fill();
+
+    // Frase principal random
+    const frase = frasesArgentinas[Math.floor(Math.random() * frasesArgentinas.length)];
+    const subFrase = subFrases[Math.floor(Math.random() * subFrases.length)];
+
+    // Sombra para textos
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.9)';
+    ctx.shadowBlur = 15;
+    ctx.shadowOffsetX = 4;
+    ctx.shadowOffsetY = 4;
+
+    // Nombre del perdedor grande
+    ctx.fillStyle = '#FF3333';
+    ctx.font = 'bold 58px Arial, sans-serif';
+    ctx.textAlign = 'center';
+    const loserText = losers.length > 1 ? losers.join(' & ') : losers[0];
+    ctx.fillText(loserText.toUpperCase(), canvas.width / 2, 90);
+
+    // Línea decorativa
+    ctx.strokeStyle = '#DAA520';
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(100, 120);
+    ctx.lineTo(canvas.width - 100, 120);
+    ctx.stroke();
+
+    // Frase principal GRANDE
+    ctx.fillStyle = '#DAA520';
+    ctx.font = 'bold 64px Arial, sans-serif';
+    ctx.fillText(frase, canvas.width / 2, 200);
+
+    // Emoji de burla
+    ctx.font = '80px Arial';
+    ctx.fillText('😂💀🤡', canvas.width / 2, 300);
+
+    // Sub frase
+    ctx.fillStyle = '#C4A574';
+    ctx.font = 'italic 28px Arial, sans-serif';
+    ctx.fillText(`"${subFrase}"`, canvas.width / 2, 370);
+
+    // Línea decorativa
+    ctx.beginPath();
+    ctx.moveTo(100, 400);
+    ctx.lineTo(canvas.width - 100, 400);
+    ctx.stroke();
+
+    // Ganador
+    ctx.fillStyle = '#44FF44';
+    ctx.font = 'bold 36px Arial, sans-serif';
+    const winnerText = winners.length > 1 ? winners.join(' & ') : winners[0];
+    ctx.fillText(`DESTRUIDO POR: ${winnerText.toUpperCase()}`, canvas.width / 2, 450);
+
+    // Reset shadow
+    ctx.shadowColor = 'transparent';
+  }
+
+  // Descargar imagen
+  document.getElementById('downloadBtn')?.addEventListener('click', () => {
+    const canvas = document.getElementById('memeCanvas');
+    const link = document.createElement('a');
+    link.download = 'a-casa-pete.png';
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  // Cerrar modal
+  document.getElementById('closeModalBtn')?.addEventListener('click', () => {
+    window.location.href = '/matches';
+  });
+</script>

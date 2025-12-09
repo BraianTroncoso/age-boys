@@ -1,0 +1,99 @@
+---
+import Layout from '../layouts/Layout.astro';
+
+// If already logged in, redirect to home
+if (Astro.locals.user) {
+  return Astro.redirect('/');
+}
+---
+
+<Layout title="Iniciar Sesión">
+  <div class="min-h-[80vh] flex items-center justify-center">
+    <div class="aoe-panel w-full max-w-md">
+      <div class="text-center mb-8">
+        <span class="text-5xl mb-4 block">⚔️</span>
+        <h1 class="aoe-title text-3xl mb-2">AoE3 Tracker</h1>
+        <p class="text-aoe-cream-dark">Inicia sesión para continuar</p>
+      </div>
+
+      <form id="loginForm" class="space-y-6">
+        <div>
+          <label for="username" class="block text-sm font-semibold text-aoe-cream mb-2">
+            Usuario
+          </label>
+          <input
+            type="text"
+            id="username"
+            name="username"
+            required
+            class="aoe-input"
+            placeholder="Tu nombre de usuario"
+          />
+        </div>
+
+        <div>
+          <label for="password" class="block text-sm font-semibold text-aoe-cream mb-2">
+            Contraseña
+          </label>
+          <input
+            type="password"
+            id="password"
+            name="password"
+            required
+            class="aoe-input"
+            placeholder="••••••••"
+          />
+        </div>
+
+        <div id="error" class="hidden text-red-400 text-sm text-center p-2 bg-red-900/20 rounded"></div>
+
+        <button type="submit" class="aoe-btn-primary w-full">
+          Entrar al Campo de Batalla
+        </button>
+      </form>
+
+      <p class="text-center mt-6 text-aoe-cream-dark">
+        ¿No tienes cuenta?
+        <a href="/register" class="text-aoe-gold hover:text-aoe-gold-light transition-colors">
+          Regístrate
+        </a>
+      </p>
+    </div>
+  </div>
+</Layout>
+
+<script>
+  const form = document.getElementById('loginForm') as HTMLFormElement;
+  const errorDiv = document.getElementById('error') as HTMLDivElement;
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorDiv.classList.add('hidden');
+
+    const formData = new FormData(form);
+    const data = {
+      username: formData.get('username'),
+      password: formData.get('password'),
+    };
+
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        window.location.href = '/';
+      } else {
+        errorDiv.textContent = result.error || 'Error al iniciar sesión';
+        errorDiv.classList.remove('hidden');
+      }
+    } catch (err) {
+      errorDiv.textContent = 'Error de conexión';
+      errorDiv.classList.remove('hidden');
+    }
+  });
+</script>

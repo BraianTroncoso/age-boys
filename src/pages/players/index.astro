@@ -1,0 +1,154 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { getRatingTier, getTierColor } from '../../lib/elo';
+import { isAdmin } from '../../lib/auth';
+import { getCivilization } from '../../lib/civilizations';
+
+const currentUser = Astro.locals.user;
+const userIsAdmin = isAdmin(currentUser);
+
+// Ahora players = users
+const players = db.users.findAll();
+
+const playersWithStats = players.map(player => {
+  const participations = db.participants.findByPlayerId(player.id);
+  const wins = participations.filter(p => p.isWinner).length;
+  const favCiv = getCivilization(player.favoriteCiv);
+  return {
+    ...player,
+    totalMatches: participations.length,
+    wins,
+    civFlag: favCiv?.flag || '⚔️'
+  };
+});
+---
+
+<Layout title="Jugadores">
+  <div class="space-y-8">
+    <div class="flex justify-between items-center">
+      <div>
+        <h1 class="aoe-title text-3xl mb-2">Jugadores</h1>
+        <p class="text-aoe-cream-dark">{playersWithStats.length} jugadores registrados</p>
+      </div>
+      {userIsAdmin && (
+        <button id="addPlayerBtn" class="aoe-btn-primary">
+          + Nuevo Jugador
+        </button>
+      )}
+    </div>
+
+    <div id="addPlayerModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+      <div class="aoe-panel w-full max-w-md mx-4">
+        <h2 class="aoe-title text-2xl mb-6">Nuevo Jugador</h2>
+        <form id="addPlayerForm" class="space-y-4">
+          <div>
+            <label for="playerName" class="block text-sm font-semibold text-aoe-cream mb-2">
+              Nombre del Jugador
+            </label>
+            <input type="text" id="playerName" name="name" required minlength="2" maxlength="30" class="aoe-input" placeholder="Nombre de guerra" />
+          </div>
+          <div id="addPlayerError" class="hidden text-red-400 text-sm"></div>
+          <div class="flex gap-4">
+            <button type="button" id="cancelAddPlayer" class="aoe-btn flex-1">Cancelar</button>
+            <button type="submit" class="aoe-btn-primary flex-1">Crear Jugador</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    {playersWithStats.length === 0 ? (
+      <div class="aoe-panel text-center py-12">
+        <span class="text-6xl mb-4 block">👥</span>
+        <h2 class="aoe-title text-xl mb-2">No hay jugadores</h2>
+        <p class="text-aoe-cream-dark mb-4">Agrega jugadores para empezar a registrar partidas</p>
+      </div>
+    ) : (
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {playersWithStats.map((player, index) => (
+          <a href={`/players/${player.id}`} class="aoe-card hover:shadow-gold-lg transition-shadow group">
+            <div class="flex items-start justify-between mb-4">
+              <div>
+                <div class="text-2xl mb-1">
+                  {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : player.civFlag}
+                </div>
+                <h3 class="font-cinzel text-xl text-aoe-cream group-hover:text-aoe-gold transition-colors">{player.username}</h3>
+                <p class={`text-sm ${getTierColor(player.eloRating)}`}>{getRatingTier(player.eloRating)}</p>
+              </div>
+              <div class="text-right">
+                <div class="aoe-stat-value">{Math.round(player.eloRating)}</div>
+                <div class="text-xs text-aoe-cream-dark">ELO</div>
+              </div>
+            </div>
+            <div class="grid grid-cols-3 gap-2">
+              <div class="aoe-stat">
+                <div class="aoe-stat-value text-lg">{player.totalMatches}</div>
+                <div class="aoe-stat-label">Partidas</div>
+              </div>
+              <div class="aoe-stat">
+                <div class="aoe-stat-value text-lg text-green-400">{player.wins}</div>
+                <div class="aoe-stat-label">Victorias</div>
+              </div>
+              <div class="aoe-stat">
+                <div class="aoe-stat-value text-lg">
+                  {player.totalMatches > 0 ? Math.round((player.wins / player.totalMatches) * 100) : 0}%
+                </div>
+                <div class="aoe-stat-label">Win Rate</div>
+              </div>
+            </div>
+          </a>
+        ))}
+      </div>
+    )}
+  </div>
+</Layout>
+
+<script>
+  const modal = document.getElementById('addPlayerModal');
+  const addBtn = document.getElementById('addPlayerBtn');
+  const cancelBtn = document.getElementById('cancelAddPlayer');
+  const form = document.getElementById('addPlayerForm');
+  const errorDiv = document.getElementById('addPlayerError');
+
+  addBtn?.addEventListener('click', () => {
+    modal?.classList.remove('hidden');
+    modal?.classList.add('flex');
+  });
+
+  cancelBtn?.addEventListener('click', () => {
+    modal?.classList.add('hidden');
+    modal?.classList.remove('flex');
+  });
+
+  modal?.addEventListener('click', (e) => {
+    if (e.target === modal) {
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+  });
+
+  form?.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    errorDiv?.classList.add('hidden');
+    const formData = new FormData(form as HTMLFormElement);
+    const name = formData.get('name');
+
+    try {
+      const response = await fetch('/api/players', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      const result = await response.json();
+      if (result.success) {
+        window.location.reload();
+      } else {
+        if (errorDiv) errorDiv.textContent = result.error || 'Error al crear jugador';
+        errorDiv?.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (errorDiv) errorDiv.textContent = 'Error de conexión';
+      errorDiv?.classList.remove('hidden');
+    }
+  });
+</script>

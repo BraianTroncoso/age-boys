@@ -1,0 +1,309 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { getRatingTier, getTierColor } from '../../lib/elo';
+import { getCivilizationName, getCivilizationFlag } from '../../lib/civilizations';
+import { getPlayerStreak, getNemesisAndVictim, getPlayerFullStats } from '../../lib/stats';
+import { getPlayerAchievements, countAchievementsByType } from '../../lib/achievements';
+
+const { id } = Astro.params;
+const playerId = parseInt(id || '0');
+
+// Get player (ahora es user)
+const player = db.users.findById(playerId);
+
+if (!player) {
+  return Astro.redirect('/players');
+}
+
+// Get player participations
+const participations = db.participants.findByPlayerId(playerId);
+
+// Calculate stats
+const totalMatches = participations.length;
+const wins = participations.filter(p => p.isWinner).length;
+const losses = totalMatches - wins;
+const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+
+// Get civilization stats
+const civStatsMap = new Map<string, { count: number; wins: number }>();
+for (const p of participations) {
+  const current = civStatsMap.get(p.civilization) || { count: 0, wins: 0 };
+  current.count++;
+  if (p.isWinner) current.wins++;
+  civStatsMap.set(p.civilization, current);
+}
+const civStats = Array.from(civStatsMap.entries())
+  .map(([civilization, stats]) => ({ civilization, ...stats }))
+  .sort((a, b) => b.count - a.count);
+
+// Get recent matches with details
+const allMatches = db.matches.findAll();
+const recentMatches = participations
+  .map(p => {
+    const match = allMatches.find(m => m.id === p.matchId);
+    return match ? {
+      matchId: match.id,
+      matchType: match.matchType,
+      playedAt: match.playedAt,
+      civilization: p.civilization,
+      isWinner: p.isWinner,
+      eloChange: p.eloChange,
+    } : null;
+  })
+  .filter(Boolean)
+  .sort((a, b) => new Date(b!.playedAt).getTime() - new Date(a!.playedAt).getTime())
+  .slice(0, 10);
+
+// Nuevas stats picantes
+const streak = getPlayerStreak(playerId);
+const { nemesis, victim } = getNemesisAndVictim(playerId);
+const fullStats = getPlayerFullStats(playerId);
+const achievements = getPlayerAchievements(playerId);
+const achievementCounts = countAchievementsByType(achievements);
+---
+
+<Layout title={player.username}>
+  <div class="space-y-8">
+    <!-- Player Header -->
+    <div class="aoe-panel">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+        <div class="flex items-center gap-4">
+          <div class="w-20 h-20 rounded-full bg-gradient-to-br from-aoe-gold via-amber-500 to-amber-700 flex items-center justify-center text-4xl border-4 border-aoe-gold shadow-lg">
+            {getCivilizationFlag(player.favoriteCiv)}
+          </div>
+          <div>
+            <h1 class="aoe-title text-3xl mb-1">{player.username}</h1>
+            <p class="text-aoe-cream-dark text-sm">
+              {getCivilizationName(player.favoriteCiv)}
+            </p>
+            <p class={`text-lg font-semibold ${getTierColor(player.eloRating)}`}>
+              {getRatingTier(player.eloRating)}
+            </p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(player.eloRating)}</div>
+            <div class="aoe-stat-label">ELO 1v1</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{totalMatches}</div>
+            <div class="aoe-stat-label">Partidas</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value text-green-400">{wins}</div>
+            <div class="aoe-stat-label">Victorias</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{winRate}%</div>
+            <div class="aoe-stat-label">Win Rate</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Racha Actual Mejorada -->
+      {streak.type !== 'none' && streak.count >= 2 && (
+        <div class={`mt-4 pt-4 border-t border-aoe-gold/20 ${streak.type === 'win' ? 'bg-green-900/10' : 'bg-red-900/10'} -mx-4 px-4 pb-4 rounded-b`}>
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-4xl">{streak.type === 'win' ? '🔥' : '💩'}</span>
+              <div>
+                <p class={`font-bold text-lg ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+                  {streak.frase}
+                </p>
+                <p class="text-aoe-cream-dark text-sm">
+                  {streak.count} {streak.type === 'win' ? 'victorias' : 'derrotas'} seguidas
+                </p>
+              </div>
+            </div>
+            <div class={`text-5xl font-cinzel ${streak.type === 'win' ? 'text-green-400' : 'text-red-400'}`}>
+              {streak.count}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+
+    <!-- Némesis y Víctima -->
+    {(nemesis || victim) && (
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {nemesis && (
+          <div class="aoe-panel border-red-500/30 bg-gradient-to-br from-red-900/20 to-transparent">
+            <div class="flex items-center gap-4">
+              <div class="w-16 h-16 rounded-full bg-red-900/50 flex items-center justify-center text-3xl border-2 border-red-500">
+                😈
+              </div>
+              <div class="flex-1">
+                <h3 class="text-red-400 text-sm uppercase tracking-wider">Tu Némesis</h3>
+                <a href={`/players/${nemesis.playerId}`} class="block">
+                  <span class="text-xl font-cinzel text-red-400 hover:text-red-300">{nemesis.name}</span>
+                </a>
+                <p class="text-aoe-cream-dark text-sm">
+                  {nemesis.name} {nemesis.frase} ({nemesis.wins}-{nemesis.losses})
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {victim && (
+          <div class="aoe-panel border-green-500/30 bg-gradient-to-br from-green-900/20 to-transparent">
+            <div class="flex items-center gap-4">
+              <div class="w-16 h-16 rounded-full bg-green-900/50 flex items-center justify-center text-3xl border-2 border-green-500">
+                👶
+              </div>
+              <div class="flex-1">
+                <h3 class="text-green-400 text-sm uppercase tracking-wider">Tu Víctima</h3>
+                <a href={`/players/${victim.playerId}`} class="block">
+                  <span class="text-xl font-cinzel text-green-400 hover:text-green-300">{victim.name}</span>
+                </a>
+                <p class="text-aoe-cream-dark text-sm">
+                  {victim.name} {victim.frase} ({victim.wins}-{victim.losses})
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
+    <!-- Logros -->
+    {achievements.length > 0 && (
+      <div class="aoe-panel">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="aoe-title text-xl">🏆 Logros Desbloqueados</h2>
+          <div class="flex gap-2 text-sm">
+            <span class="text-green-400">{achievementCounts.glory} gloria</span>
+            <span class="text-aoe-cream-dark">|</span>
+            <span class="text-red-400">{achievementCounts.shame} vergüenza</span>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+          {achievements.map(achievement => (
+            <div class={`p-3 rounded border ${
+              achievement.type === 'glory' ? 'bg-green-900/20 border-green-500/30' :
+              achievement.type === 'shame' ? 'bg-red-900/20 border-red-500/30' :
+              'bg-aoe-dark/50 border-aoe-gold/20'
+            }`}>
+              <div class="flex items-center gap-2 mb-1">
+                <span class="text-2xl">{achievement.icon}</span>
+                <span class={`font-semibold text-sm ${
+                  achievement.type === 'glory' ? 'text-green-400' :
+                  achievement.type === 'shame' ? 'text-red-400' :
+                  'text-aoe-gold'
+                }`}>
+                  {achievement.name}
+                </span>
+              </div>
+              <p class="text-xs text-aoe-cream-dark">{achievement.description}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    )}
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <!-- Civilization Stats -->
+      <div class="aoe-panel">
+        <h2 class="aoe-title text-xl mb-4">🏛️ Civilizaciones</h2>
+
+        {civStats.length === 0 ? (
+          <p class="text-aoe-cream-dark text-center py-4">Sin partidas registradas</p>
+        ) : (
+          <div class="space-y-3">
+            {civStats.map((civ) => {
+              const civWinRate = civ.count > 0 ? Math.round((civ.wins / civ.count) * 100) : 0;
+              return (
+                <div class="flex items-center justify-between p-2 bg-aoe-dark/50 rounded">
+                  <span class="text-aoe-cream">{getCivilizationName(civ.civilization)}</span>
+                  <div class="flex items-center gap-4">
+                    <span class="text-sm text-aoe-cream-dark">{civ.count} partidas</span>
+                    <span class={`text-sm font-semibold ${civWinRate >= 50 ? 'text-green-400' : 'text-red-400'}`}>
+                      {civWinRate}% WR
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="aoe-panel">
+        <h2 class="aoe-title text-xl mb-4">📊 Estadísticas</h2>
+        <div class="grid grid-cols-2 gap-4">
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(player.eloTeams)}</div>
+            <div class="aoe-stat-label">ELO Equipos</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(player.eloFfa)}</div>
+            <div class="aoe-stat-label">ELO FFA</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value text-green-400">{fullStats.maxWinStreak}</div>
+            <div class="aoe-stat-label">Mejor Racha W</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value text-red-400">{fullStats.maxLossStreak}</div>
+            <div class="aoe-stat-label">Peor Racha L</div>
+          </div>
+        </div>
+
+        <a href={`/head-to-head?player1=${playerId}`} class="block text-center mt-4 text-aoe-gold hover:text-aoe-gold-light text-sm">
+          Ver enfrentamientos →
+        </a>
+      </div>
+    </div>
+
+    <!-- Recent Matches -->
+    <div class="aoe-panel">
+      <h2 class="aoe-title text-xl mb-4">📜 Partidas Recientes</h2>
+
+      {recentMatches.length === 0 ? (
+        <p class="text-aoe-cream-dark text-center py-4">Sin partidas registradas</p>
+      ) : (
+        <div class="overflow-x-auto">
+          <table class="aoe-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Tipo</th>
+                <th>Civilización</th>
+                <th class="text-center">Resultado</th>
+                <th class="text-center">ELO</th>
+              </tr>
+            </thead>
+            <tbody>
+              {recentMatches.map((match) => (
+                <tr>
+                  <td class="text-aoe-cream-dark">
+                    {match.playedAt ? new Date(match.playedAt).toLocaleDateString('es') : '-'}
+                  </td>
+                  <td>{match.matchType}</td>
+                  <td>{getCivilizationName(match.civilization)}</td>
+                  <td class="text-center">
+                    <span class={`aoe-badge ${match.isWinner ? 'aoe-badge-win' : 'aoe-badge-loss'}`}>
+                      {match.isWinner ? 'Victoria' : 'Derrota'}
+                    </span>
+                  </td>
+                  <td class={`text-center font-semibold ${(match.eloChange || 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {match.eloChange && match.eloChange > 0 ? '+' : ''}{match.eloChange ? Math.round(match.eloChange) : 0}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+
+    <a href="/players" class="inline-block text-aoe-gold hover:text-aoe-gold-light">
+      ← Volver a jugadores
+    </a>
+  </div>
+</Layout>
