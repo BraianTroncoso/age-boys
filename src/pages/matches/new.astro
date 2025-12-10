@@ -186,14 +186,28 @@ const players = await db.users.findAll();
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div class="aoe-card">
-            <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Equipo Ganador</h3>
+          <div class="aoe-card" id="team1Card">
+            <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 1</h3>
             <div class="space-y-4">${team1Players}</div>
           </div>
-          <div class="aoe-card">
-            <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Equipo Perdedor</h3>
+          <div class="aoe-card" id="team2Card">
+            <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 2</h3>
             <div class="space-y-4">${team2Players}</div>
           </div>
+        </div>
+
+        <!-- Selector de equipo ganador -->
+        <div class="aoe-card mt-6">
+          <h3 class="aoe-title text-lg mb-4">🏆 ¿Quién ganó?</h3>
+          <div class="grid grid-cols-2 gap-4">
+            <button type="button" data-winner="1" class="team-winner-btn aoe-btn py-4 text-lg border-2 border-green-500 bg-green-500/20 text-green-400">
+              🏆 Equipo 1 Ganó
+            </button>
+            <button type="button" data-winner="2" class="team-winner-btn aoe-btn py-4 text-lg border-2 border-aoe-brown-light hover:border-green-500/50">
+              🏆 Equipo 2 Ganó
+            </button>
+          </div>
+          <input type="hidden" name="winningTeam" value="1" />
         </div>
       `;
     } else if (matchType === 'ffa') {
@@ -290,6 +304,47 @@ const players = await db.users.findAll();
           randomResult.innerHTML = '<p class="text-green-400 text-center">Equipos aplicados!</p>';
         });
       });
+
+      // Handle winner selection buttons
+      setupWinnerButtons();
+    }
+
+    function setupWinnerButtons() {
+      const winnerBtns = document.querySelectorAll('.team-winner-btn');
+      const winningTeamInput = document.querySelector('input[name="winningTeam"]');
+      const team1Card = document.getElementById('team1Card');
+      const team2Card = document.getElementById('team2Card');
+
+      winnerBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+          const winner = btn.dataset.winner;
+          winningTeamInput.value = winner;
+
+          // Update button styles
+          winnerBtns.forEach(b => {
+            if (b.dataset.winner === winner) {
+              b.classList.add('border-green-500', 'bg-green-500/20', 'text-green-400');
+              b.classList.remove('border-aoe-brown-light', 'hover:border-green-500/50');
+            } else {
+              b.classList.remove('border-green-500', 'bg-green-500/20', 'text-green-400');
+              b.classList.add('border-aoe-brown-light', 'hover:border-green-500/50');
+            }
+          });
+
+          // Update card styles to show winner/loser
+          if (winner === '1') {
+            team1Card.classList.add('border-green-500/50');
+            team1Card.classList.remove('border-red-500/50');
+            team2Card.classList.add('border-red-500/50');
+            team2Card.classList.remove('border-green-500/50');
+          } else {
+            team2Card.classList.add('border-green-500/50');
+            team2Card.classList.remove('border-red-500/50');
+            team1Card.classList.add('border-red-500/50');
+            team1Card.classList.remove('border-green-500/50');
+          }
+        });
+      });
     }
 
     // Handle FFA add loser button
@@ -352,12 +407,14 @@ const players = await db.users.findAll();
       ];
     } else if (matchType === '2v2' || matchType === '3v3') {
       const teamSize = matchType === '2v2' ? 2 : 3;
+      const winningTeam = parseInt(formData.get('winningTeam')) || 1;
+
       for (let i = 1; i <= teamSize; i++) {
         const p1 = formData.get(`team1_player${i}`);
-        if (p1) data.participants.push({ playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: true });
+        if (p1) data.participants.push({ playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: winningTeam === 1 });
 
         const p2 = formData.get(`team2_player${i}`);
-        if (p2) data.participants.push({ playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: false });
+        if (p2) data.participants.push({ playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: winningTeam === 2 });
       }
     } else if (matchType === 'ffa') {
       const winner = formData.get('team1_player1');
