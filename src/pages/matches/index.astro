@@ -29,7 +29,13 @@ for (const match of paginatedMatches) {
     const player = await db.users.findById(p.playerId);
     participants.push({ ...p, playerName: player?.username || 'Unknown' });
   }
-  matchesWithParticipants.push({ ...match, participants });
+  // Obtener el nombre del usuario que registró la partida
+  const createdByUser = match.createdBy ? await db.users.findById(match.createdBy) : null;
+  matchesWithParticipants.push({
+    ...match,
+    participants,
+    createdByName: createdByUser?.username || null
+  });
 }
 
 // Generar array de páginas para mostrar
@@ -81,6 +87,12 @@ const getPageNumbers = () => {
                       <p class="text-xs sm:text-sm text-aoe-cream-dark">{new Date(match.playedAt).toLocaleDateString('es', { day: 'numeric', month: 'short' })}</p>
                     </div>
                   </div>
+                  {match.createdByName && (
+                    <div class="text-right">
+                      <p class="text-[10px] sm:text-xs text-aoe-cream-dark">Registrado por</p>
+                      <p class="text-xs sm:text-sm text-aoe-gold">{match.createdByName}</p>
+                    </div>
+                  )}
                 </div>
                 <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                   <div class="bg-green-900/20 border border-green-500/30 rounded p-3 sm:p-4">
