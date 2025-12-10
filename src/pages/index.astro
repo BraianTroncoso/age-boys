@@ -5,7 +5,19 @@ import { getRatingTier, getTierColor } from '../lib/elo';
 import { getCivilizationName, getCivilizationFlag } from '../lib/civilizations';
 import { getWeeklyLoser } from '../lib/stats';
 
-const players = await db.users.findAllPlayers();
+// Obtener el filtro de ranking de la URL
+const url = new URL(Astro.request.url);
+const rankingType = url.searchParams.get('ranking') || '1v1';
+
+// Mapear el tipo de ranking al campo de ELO
+const eloFieldMap: Record<string, 'eloRating' | 'eloTeams' | 'eloFfa'> = {
+  '1v1': 'eloRating',
+  'teams': 'eloTeams',
+  'ffa': 'eloFfa'
+};
+const eloField = eloFieldMap[rankingType] || 'eloRating';
+
+const players = await db.users.findAllPlayers(eloField);
 const allMatchesRaw = await db.matches.findAll();
 const matches = allMatchesRaw.slice(0, 5);
 
@@ -187,7 +199,31 @@ for (const match of matches) {
     <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
       <div class="lg:col-span-2">
         <div class="aoe-panel">
-          <h2 class="aoe-title text-lg sm:text-xl mb-3 sm:mb-4">🏆 Rankings 1v1</h2>
+          <!-- Tabs de filtro -->
+          <div class="flex flex-wrap gap-2 mb-4">
+            <a
+              href="/?ranking=1v1"
+              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === '1v1' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+            >
+              🏆 1v1
+            </a>
+            <a
+              href="/?ranking=teams"
+              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === 'teams' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+            >
+              ⚔️ Teams
+            </a>
+            <a
+              href="/?ranking=ffa"
+              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === 'ffa' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+            >
+              👑 FFA
+            </a>
+          </div>
+
+          <h2 class="aoe-title text-lg sm:text-xl mb-3 sm:mb-4">
+            {rankingType === '1v1' ? '🏆 Rankings 1v1' : rankingType === 'teams' ? '⚔️ Rankings Teams' : '👑 Rankings FFA'}
+          </h2>
 
           {players.length === 0 ? (
             <div class="text-center py-6 sm:py-8 text-aoe-cream-dark">
@@ -208,24 +244,27 @@ for (const match of matches) {
                   </tr>
                 </thead>
                 <tbody>
-                  {players.map((player, index) => (
-                    <tr>
-                      <td class="font-cinzel text-aoe-gold text-sm sm:text-base">
-                        {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
-                      </td>
-                      <td>
-                        <a href={`/players/${player.id}`} class="hover:text-aoe-gold transition-colors text-sm sm:text-base">
-                          {player.username}
-                        </a>
-                      </td>
-                      <td class="text-center font-semibold text-aoe-gold text-sm sm:text-base">
-                        {Math.round(player.eloRating)}
-                      </td>
-                      <td class={`text-center hidden sm:table-cell ${getTierColor(player.eloRating)}`}>
-                        {getRatingTier(player.eloRating)}
-                      </td>
-                    </tr>
-                  ))}
+                  {players.map((player, index) => {
+                    const currentElo = player[eloField];
+                    return (
+                      <tr>
+                        <td class="font-cinzel text-aoe-gold text-sm sm:text-base">
+                          {index === 0 ? '🥇' : index === 1 ? '🥈' : index === 2 ? '🥉' : index + 1}
+                        </td>
+                        <td>
+                          <a href={`/players/${player.id}`} class="hover:text-aoe-gold transition-colors text-sm sm:text-base">
+                            {player.username}
+                          </a>
+                        </td>
+                        <td class="text-center font-semibold text-aoe-gold text-sm sm:text-base">
+                          {Math.round(currentElo)}
+                        </td>
+                        <td class={`text-center hidden sm:table-cell ${getTierColor(currentElo)}`}>
+                          {getRatingTier(currentElo)}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

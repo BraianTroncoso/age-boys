@@ -93,10 +93,10 @@ export const db = {
       const result = await client.execute('SELECT * FROM users ORDER BY eloRating DESC');
       return result.rows as unknown as User[];
     },
-    findAllPlayers: async (): Promise<User[]> => {
+    findAllPlayers: async (orderBy: 'eloRating' | 'eloTeams' | 'eloFfa' = 'eloRating'): Promise<User[]> => {
       await ensureInit();
       // Excluir admin del ranking
-      const result = await client.execute("SELECT * FROM users WHERE username != 'admin' ORDER BY eloRating DESC");
+      const result = await client.execute(`SELECT * FROM users WHERE username != 'admin' ORDER BY ${orderBy} DESC`);
       return result.rows as unknown as User[];
     },
     findByUsername: async (username: string): Promise<User | undefined> => {
