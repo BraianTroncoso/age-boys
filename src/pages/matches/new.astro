@@ -228,14 +228,20 @@ const players = await db.users.findAll();
       const randomResult = document.getElementById('randomResult');
 
       randomizeBtn?.addEventListener('click', () => {
+        const allCheckboxes = document.querySelectorAll('.random-player-checkbox');
         const checkboxes = document.querySelectorAll('.random-player-checkbox:checked');
+
+        console.log('Total checkboxes:', allCheckboxes.length);
+        console.log('Checked checkboxes:', checkboxes.length);
+        allCheckboxes.forEach(cb => console.log(cb.value, cb.checked));
+
         const selectedPlayers = Array.from(checkboxes).map(cb => ({
           id: cb.value,
           name: cb.dataset.name
         }));
 
         if (selectedPlayers.length !== teamSize * 2) {
-          randomResult.innerHTML = `<p class="text-red-400">Selecciona exactamente ${teamSize * 2} jugadores</p>`;
+          randomResult.innerHTML = `<p class="text-red-400">Selecciona exactamente ${teamSize * 2} jugadores (tenés ${selectedPlayers.length} seleccionados)</p>`;
           randomResult.classList.remove('hidden');
           return;
         }
