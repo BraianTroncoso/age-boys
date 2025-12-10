@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { getRatingTier, getTierColor } from '../../lib/elo';
-import { getCivilizationName, getCivilizationFlag } from '../../lib/civilizations';
+import { getCivilizationName, getCivilizationFlag, getCivilizationFlagUrl, getCivilizationColors } from '../../lib/civilizations';
 import { getPlayerStreak, getNemesisAndVictim, getPlayerFullStats } from '../../lib/stats';
 import { getPlayerAchievements, countAchievementsByType } from '../../lib/achievements';
 
@@ -61,16 +61,33 @@ const { nemesis, victim } = await getNemesisAndVictim(playerId);
 const fullStats = await getPlayerFullStats(playerId);
 const achievements = await getPlayerAchievements(playerId);
 const achievementCounts = countAchievementsByType(achievements);
+
+const [color1, color2] = getCivilizationColors(player.favoriteCiv);
 ---
 
 <Layout title={player.username}>
   <div class="space-y-4 sm:space-y-8">
     <!-- Player Header -->
-    <div class="aoe-panel">
-      <div class="flex flex-col gap-4 sm:gap-6">
+    <div
+      class="aoe-panel relative overflow-hidden"
+      style={`background: linear-gradient(135deg, ${color1}15 0%, transparent 50%, ${color2}15 100%);`}
+    >
+      <!-- Background flag -->
+      <img
+        src={getCivilizationFlagUrl(player.favoriteCiv, 320)}
+        alt=""
+        class="absolute -right-8 -top-8 w-40 sm:w-56 h-auto opacity-20 pointer-events-none select-none blur-[1px]"
+      />
+      <!-- Color accent bar -->
+      <div
+        class="absolute top-0 left-0 right-0 h-1"
+        style={`background: linear-gradient(90deg, ${color1}, ${color2});`}
+      ></div>
+
+      <div class="relative z-10 flex flex-col gap-4 sm:gap-6">
         <div class="flex items-center gap-3 sm:gap-4">
-          <div class="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-aoe-gold via-amber-500 to-amber-700 flex items-center justify-center text-2xl sm:text-4xl border-3 sm:border-4 border-aoe-gold shadow-lg flex-shrink-0">
-            {getCivilizationFlag(player.favoriteCiv)}
+          <div class="w-14 h-14 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-aoe-gold via-amber-500 to-amber-700 flex items-center justify-center border-3 sm:border-4 border-aoe-gold shadow-lg flex-shrink-0 overflow-hidden">
+            <img src={getCivilizationFlagUrl(player.favoriteCiv, 80)} alt={getCivilizationName(player.favoriteCiv)} class="w-full h-full object-cover" />
           </div>
           <div class="min-w-0">
             <h1 class="aoe-title text-xl sm:text-3xl mb-0.5 sm:mb-1 truncate">{player.username}</h1>

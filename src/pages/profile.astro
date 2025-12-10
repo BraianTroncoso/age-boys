@@ -1,7 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
-import { civilizations, getCivilizationName } from '../lib/civilizations';
+import { civilizations, getCivilizationName, getCivilizationFlagUrl, getCivilizationColors } from '../lib/civilizations';
 import { getRatingTier, getTierColor } from '../lib/elo';
 
 const user = Astro.locals.user;
@@ -14,6 +14,8 @@ const participations = await db.participants.findByPlayerId(user.id);
 const totalMatches = participations.length;
 const wins = participations.filter(p => p.isWinner).length;
 const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
+
+const [color1, color2] = getCivilizationColors(user.favoriteCiv);
 ---
 
 <Layout title="Mi Perfil">
@@ -23,44 +25,61 @@ const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
       <p class="text-aoe-cream-dark">Gestiona tu información de jugador</p>
     </div>
 
-    <div class="aoe-panel">
-      <div class="flex items-center gap-6 mb-6">
-        <div class="w-20 h-20 rounded-full bg-aoe-gold/20 flex items-center justify-center text-4xl border-2 border-aoe-gold">
-          {civilizations.find(c => c.id === user.favoriteCiv)?.flag || '⚔️'}
-        </div>
-        <div>
-          <h2 class="aoe-title text-2xl">{user.username}</h2>
-          <p class={`${getTierColor(user.eloRating)}`}>{getRatingTier(user.eloRating)}</p>
-        </div>
-      </div>
+    <div
+      class="aoe-panel relative overflow-hidden"
+      style={`background: linear-gradient(135deg, ${color1}15 0%, transparent 50%, ${color2}15 100%);`}
+    >
+      <!-- Background flag -->
+      <img
+        src={getCivilizationFlagUrl(user.favoriteCiv, 320)}
+        alt=""
+        class="absolute -right-8 -top-8 w-48 h-auto opacity-20 pointer-events-none select-none blur-[1px]"
+      />
+      <!-- Color accent bar -->
+      <div
+        class="absolute top-0 left-0 right-0 h-1"
+        style={`background: linear-gradient(90deg, ${color1}, ${color2});`}
+      ></div>
 
-      <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="aoe-stat">
-          <div class="aoe-stat-value">{Math.round(user.eloRating)}</div>
-          <div class="aoe-stat-label">ELO 1v1</div>
+      <div class="relative z-10">
+        <div class="flex items-center gap-6 mb-6">
+          <div class="w-20 h-20 rounded-full bg-aoe-gold/20 flex items-center justify-center border-2 border-aoe-gold overflow-hidden">
+            <img src={getCivilizationFlagUrl(user.favoriteCiv, 80)} alt={getCivilizationName(user.favoriteCiv)} class="w-full h-full object-cover" />
+          </div>
+          <div>
+            <h2 class="aoe-title text-2xl">{user.username}</h2>
+            <p class={`${getTierColor(user.eloRating)}`}>{getRatingTier(user.eloRating)}</p>
+          </div>
         </div>
-        <div class="aoe-stat">
-          <div class="aoe-stat-value">{Math.round(user.eloTeams)}</div>
-          <div class="aoe-stat-label">ELO Equipos</div>
-        </div>
-        <div class="aoe-stat">
-          <div class="aoe-stat-value">{Math.round(user.eloFfa)}</div>
-          <div class="aoe-stat-label">ELO FFA</div>
-        </div>
-      </div>
 
-      <div class="grid grid-cols-3 gap-4 mb-6">
-        <div class="aoe-stat">
-          <div class="aoe-stat-value">{totalMatches}</div>
-          <div class="aoe-stat-label">Partidas</div>
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(user.eloRating)}</div>
+            <div class="aoe-stat-label">ELO 1v1</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(user.eloTeams)}</div>
+            <div class="aoe-stat-label">ELO Equipos</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{Math.round(user.eloFfa)}</div>
+            <div class="aoe-stat-label">ELO FFA</div>
+          </div>
         </div>
-        <div class="aoe-stat">
-          <div class="aoe-stat-value text-green-400">{wins}</div>
-          <div class="aoe-stat-label">Victorias</div>
-        </div>
-        <div class="aoe-stat">
-          <div class="aoe-stat-value">{winRate}%</div>
-          <div class="aoe-stat-label">Win Rate</div>
+
+        <div class="grid grid-cols-3 gap-4 mb-6">
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{totalMatches}</div>
+            <div class="aoe-stat-label">Partidas</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value text-green-400">{wins}</div>
+            <div class="aoe-stat-label">Victorias</div>
+          </div>
+          <div class="aoe-stat">
+            <div class="aoe-stat-value">{winRate}%</div>
+            <div class="aoe-stat-label">Win Rate</div>
+          </div>
         </div>
       </div>
     </div>
