@@ -230,10 +230,52 @@ const players = await db.users.findAll();
 
     playersContainer.innerHTML = html;
 
-    // Add change listeners to show civilization
+    // Add change listeners to show civilization and validate duplicates
     document.querySelectorAll('select[name^="team"]').forEach(select => {
-      select.addEventListener('change', () => updateCivDisplay(select));
+      select.addEventListener('change', () => {
+        updateCivDisplay(select);
+        validateDuplicatePlayers();
+      });
     });
+
+    function validateDuplicatePlayers() {
+      const allSelects = document.querySelectorAll('select[name^="team"]');
+      const selectedValues = [];
+
+      // Reset all selects to normal state
+      allSelects.forEach(s => {
+        s.classList.remove('border-red-500', 'bg-red-500/10');
+      });
+      errorDiv?.classList.add('hidden');
+
+      // Collect selected values
+      allSelects.forEach(s => {
+        if (s.value) {
+          selectedValues.push({ value: s.value, element: s });
+        }
+      });
+
+      // Find duplicates
+      const seen = {};
+      const duplicates = [];
+      selectedValues.forEach(item => {
+        if (seen[item.value]) {
+          duplicates.push(item.value);
+        }
+        seen[item.value] = true;
+      });
+
+      // Mark duplicates
+      if (duplicates.length > 0) {
+        selectedValues.forEach(item => {
+          if (duplicates.includes(item.value)) {
+            item.element.classList.add('border-red-500', 'bg-red-500/10');
+          }
+        });
+        errorDiv.textContent = 'No podés seleccionar el mismo jugador más de una vez';
+        errorDiv?.classList.remove('hidden');
+      }
+    }
 
     // Handle team randomizer
     if (matchType === '2v2' || matchType === '3v3') {

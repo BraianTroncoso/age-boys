@@ -11,7 +11,11 @@
       "Bash(cat:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(npx turso db shell age-boys --url \"libsql://age-boys-braiantroncoso.aws-us-east-1.turso.io\" --auth-token \"eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjUzMTY3NDEsImlkIjoiYzQxZDJjM2EtZWI3OC00ZDhkLWIwNzEtZjZiYTI4MjY2NTQwIiwicmlkIjoiODkxNTk3YWItNjdmMS00NDkxLTk1ZjItODEwYmU3OWNkMTFlIn0.NrirvlVTesOfJjoOKB3eMHYI8VA16K6UaFN3-K5ppS-Ius2-mHdZfymcSPtNvAKfCuYPoO_4amaRk6dCPmbkCw\" \"SELECT m.id, m.matchType, m.playedAt, GROUP_CONCAT(u.username || '':'' || mp.isWinner || '':'' || mp.eloChange) as participants FROM matches m JOIN match_participants mp ON m.id = mp.matchId JOIN users u ON mp.playerId = u.id GROUP BY m.id ORDER BY m.playedAt DESC;\")",
+      "Bash(node -e \"\nconst { createClient } = require(''@libsql/client'');\nconst client = createClient({\n  url: ''libsql://age-boys-braiantroncoso.aws-us-east-1.turso.io'',\n  authToken: ''eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjUzMTY3NDEsImlkIjoiYzQxZDJjM2EtZWI3OC00ZDhkLWIwNzEtZjZiYTI4MjY2NTQwIiwicmlkIjoiODkxNTk3YWItNjdmMS00NDkxLTk1ZjItODEwYmU3OWNkMTFlIn0.NrirvlVTesOfJjoOKB3eMHYI8VA16K6UaFN3-K5ppS-Ius2-mHdZfymcSPtNvAKfCuYPoO_4amaRk6dCPmbkCw''\n});\n\nasync function main() {\n  const result = await client.execute(''SELECT m.id, m.matchType, m.playedAt FROM matches m ORDER BY m.playedAt DESC'');\n  console.log(''Partidas:'');\n  console.log(result.rows);\n}\nmain();\n\")",
+      "Bash(curl -s \"libsql://age-boys-braiantroncoso.aws-us-east-1.turso.io\" -H \"Authorization: Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjUzMTY3NDEsImlkIjoiYzQxZDJjM2EtZWI3OC00ZDhkLWIwNzEtZjZiYTI4MjY2NTQwIiwicmlkIjoiODkxNTk3YWItNjdmMS00NDkxLTk1ZjItODEwYmU3OWNkMTFlIn0.NrirvlVTesOfJjoOKB3eMHYI8VA16K6UaFN3-K5ppS-Ius2-mHdZfymcSPtNvAKfCuYPoO_4amaRk6dCPmbkCw\" -d '{\"\"statements\"\": [\"\"SELECT m.id, m.matchType, m.playedAt FROM matches m ORDER BY m.playedAt DESC\"\"]}')",
+      "Bash(curl:*)"
     ]
   }
 }
