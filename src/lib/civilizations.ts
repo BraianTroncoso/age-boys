@@ -18,6 +18,7 @@ export const civilizations = [
   { id: 'usa', name: 'Estados Unidos', flag: '🇺🇸' },
   { id: 'mexicans', name: 'Mexicanos', flag: '🇲🇽' },
   { id: 'ethiopians', name: 'Etíopes', flag: '🇪🇹' },
+  { id: 'hausa', name: 'Hausa', flag: '🇳🇬' },
   { id: 'maltese', name: 'Malteses', flag: '🇲🇹' },
   { id: 'italians', name: 'Italianos', flag: '🇮🇹' },
 ] as const;
