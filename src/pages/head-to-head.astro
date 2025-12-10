@@ -3,7 +3,8 @@ import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
 import { getCivilizationName } from '../lib/civilizations';
 
-const players = await db.users.findAll();
+const allPlayers = await db.users.findAll();
+const players = allPlayers.filter(p => p.username !== 'admin');
 
 // Get query params
 const url = new URL(Astro.request.url);

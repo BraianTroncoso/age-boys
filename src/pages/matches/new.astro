@@ -3,7 +3,8 @@ import Layout from '../../layouts/Layout.astro';
 import { db } from '../../db';
 import { getCivilizationName, getCivilizationFlag } from '../../lib/civilizations';
 
-const players = await db.users.findAll();
+const allPlayers = await db.users.findAll();
+const players = allPlayers.filter(p => p.username !== 'admin');
 ---
 
 <Layout title="Nueva Partida">
@@ -168,15 +169,21 @@ const players = await db.users.findAll();
         <div class="aoe-card mb-6">
           <h3 class="aoe-title text-lg mb-4">🎲 Aleatorizar Equipos</h3>
           <div class="mb-4">
-            <label class="block text-sm text-aoe-cream-dark mb-2">Selecciona ${teamSize * 2} jugadores:</label>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-2" id="randomPlayerSelection">
+            <label class="block text-sm text-aoe-cream-dark mb-3">Selecciona ${teamSize * 2} jugadores:</label>
+            <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" id="randomPlayerSelection">
               ${players.map(p => `
-                <label class="flex items-center gap-2 p-2 bg-aoe-dark/50 rounded cursor-pointer hover:bg-aoe-dark/70">
-                  <input type="checkbox" value="${p.id}" data-name="${p.username}" class="random-player-checkbox" />
-                  <span class="text-sm">${p.username}</span>
+                <label class="cursor-pointer group">
+                  <input type="checkbox" value="${p.id}" data-name="${p.username}" class="peer hidden random-player-checkbox" />
+                  <div class="player-card aoe-card text-center border-2 border-aoe-gold/30 peer-checked:border-aoe-gold peer-checked:bg-gradient-to-br peer-checked:from-aoe-gold/30 peer-checked:to-amber-900/40 peer-checked:shadow-[0_0_20px_rgba(218,165,32,0.6)] transition-all py-3 hover:border-aoe-gold/50">
+                    <span class="player-name text-sm block">${p.username}</span>
+                    <span class="check-indicator hidden peer-checked:block text-green-400 text-lg mt-1">✓</span>
+                  </div>
                 </label>
               `).join('')}
             </div>
+            <p class="text-aoe-cream-dark text-sm mt-3 text-center" id="selectedRandomCount">
+              0 de ${teamSize * 2} jugadores seleccionados
+            </p>
           </div>
           <button type="button" id="randomizeBtn" class="aoe-btn w-full">
             🎲 Generar Equipos al Azar
@@ -212,18 +219,46 @@ const players = await db.users.findAll();
       `;
     } else if (matchType === 'ffa') {
       html = `
-        <div class="aoe-card">
-          <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Ganador</h3>
-          ${createPlayerSelect(1, 1, 'Jugador ganador')}
-        </div>
-        <div class="aoe-card">
-          <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Perdedores</h3>
-          <div id="ffaLosers" class="space-y-4">
-            ${createPlayerSelect(2, 1, 'Perdedor 1')}
+        <!-- FFA Player Selection -->
+        <div class="aoe-card mb-6">
+          <h3 class="aoe-title text-lg mb-4">👑 Selecciona los Jugadores</h3>
+          <p class="text-sm text-aoe-cream-dark mb-3">Selecciona entre 3 y ${players.length} jugadores para el FFA:</p>
+          <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" id="ffaPlayerSelection">
+            ${players.map(p => `
+              <label class="cursor-pointer group">
+                <input type="checkbox" value="${p.id}" data-name="${p.username}" class="peer hidden ffa-player-checkbox" />
+                <div class="player-card aoe-card text-center border-2 border-aoe-gold/30 peer-checked:border-aoe-gold peer-checked:bg-gradient-to-br peer-checked:from-aoe-gold/30 peer-checked:to-amber-900/40 peer-checked:shadow-[0_0_20px_rgba(218,165,32,0.6)] transition-all py-3 hover:border-aoe-gold/50">
+                  <span class="player-name text-sm block">${p.username}</span>
+                  <span class="check-indicator hidden peer-checked:block text-green-400 text-lg mt-1">✓</span>
+                </div>
+              </label>
+            `).join('')}
           </div>
-          <button type="button" id="addLoser" class="aoe-btn mt-4 w-full">
-            + Agregar Perdedor
+          <p class="text-aoe-cream-dark text-sm mt-3 text-center" id="selectedFfaCount">
+            0 jugadores seleccionados (mínimo 3)
+          </p>
+          <button type="button" id="applyFfaBtn" class="aoe-btn-primary w-full mt-4" disabled>
+            Confirmar Jugadores
           </button>
+        </div>
+
+        <!-- FFA Teams Display (hidden until applied) -->
+        <div id="ffaTeamsContainer" class="hidden">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="aoe-card" id="ffaWinnerCard">
+              <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Ganador</h3>
+              <p class="text-aoe-cream-dark text-sm text-center py-4">Selecciona el ganador</p>
+            </div>
+            <div class="aoe-card" id="ffaLosersCard">
+              <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Perdedores</h3>
+              <p class="text-aoe-cream-dark text-sm text-center py-4">Los demás serán perdedores</p>
+            </div>
+          </div>
+          <div class="aoe-card mt-6">
+            <button type="button" id="resetFfaBtn" class="aoe-btn w-full text-sm">
+              🔄 Cambiar jugadores
+            </button>
+          </div>
         </div>
       `;
     }
@@ -282,14 +317,29 @@ const players = await db.users.findAll();
       const teamSize = matchType === '2v2' ? 2 : 3;
       const randomizeBtn = document.getElementById('randomizeBtn');
       const randomResult = document.getElementById('randomResult');
+      const selectedRandomCount = document.getElementById('selectedRandomCount');
+
+      // Update selected count when checkboxes change
+      function updateRandomSelectedCount() {
+        const checked = document.querySelectorAll('.random-player-checkbox:checked').length;
+        const required = teamSize * 2;
+        selectedRandomCount.textContent = `${checked} de ${required} jugadores seleccionados`;
+
+        if (checked === required) {
+          selectedRandomCount.classList.add('text-green-400');
+          selectedRandomCount.classList.remove('text-aoe-cream-dark');
+        } else {
+          selectedRandomCount.classList.remove('text-green-400');
+          selectedRandomCount.classList.add('text-aoe-cream-dark');
+        }
+      }
+
+      document.querySelectorAll('.random-player-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateRandomSelectedCount);
+      });
 
       randomizeBtn?.addEventListener('click', () => {
-        const allCheckboxes = document.querySelectorAll('.random-player-checkbox');
         const checkboxes = document.querySelectorAll('.random-player-checkbox:checked');
-
-        console.log('Total checkboxes:', allCheckboxes.length);
-        console.log('Checked checkboxes:', checkboxes.length);
-        allCheckboxes.forEach(cb => console.log(cb.value, cb.checked));
 
         const selectedPlayers = Array.from(checkboxes).map(cb => ({
           id: cb.value,
@@ -329,21 +379,69 @@ const players = await db.users.findAll();
 
         // Apply button
         document.getElementById('applyRandomBtn')?.addEventListener('click', () => {
-          team1.forEach((p, i) => {
-            const select = document.querySelector(`select[name="team1_player${i + 1}"]`);
-            if (select) {
-              select.value = p.id;
-              updateCivDisplay(select);
-            }
+          const team1Card = document.getElementById('team1Card');
+          const team2Card = document.getElementById('team2Card');
+
+          // Replace team1 selects with fixed cards
+          team1Card.innerHTML = `
+            <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 1</h3>
+            <div class="space-y-3">
+              ${team1.map((p, i) => {
+                const player = playersMap[parseInt(p.id)];
+                const civ = player?.favoriteCiv || 'spanish';
+                return `
+                  <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-aoe-gold/30 to-amber-900/40 flex items-center justify-center text-lg">
+                      ⚔️
+                    </div>
+                    <div>
+                      <p class="font-semibold text-aoe-cream">${p.name}</p>
+                      <p class="text-xs text-aoe-cream-dark">Civilización: ${civ}</p>
+                    </div>
+                    <input type="hidden" name="team1_player${i + 1}" value="${p.id}" />
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+
+          // Replace team2 selects with fixed cards
+          team2Card.innerHTML = `
+            <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 2</h3>
+            <div class="space-y-3">
+              ${team2.map((p, i) => {
+                const player = playersMap[parseInt(p.id)];
+                const civ = player?.favoriteCiv || 'spanish';
+                return `
+                  <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30">
+                    <div class="w-10 h-10 rounded-full bg-gradient-to-br from-aoe-gold/30 to-amber-900/40 flex items-center justify-center text-lg">
+                      ⚔️
+                    </div>
+                    <div>
+                      <p class="font-semibold text-aoe-cream">${p.name}</p>
+                      <p class="text-xs text-aoe-cream-dark">Civilización: ${civ}</p>
+                    </div>
+                    <input type="hidden" name="team2_player${i + 1}" value="${p.id}" />
+                  </div>
+                `;
+              }).join('')}
+            </div>
+          `;
+
+          randomResult.innerHTML = `
+            <p class="text-green-400 text-center mb-2">✓ Equipos aplicados!</p>
+            <button type="button" id="resetTeamsBtn" class="aoe-btn w-full text-sm">
+              🔄 Volver a aleatorizar
+            </button>
+          `;
+
+          // Reset button to re-randomize
+          document.getElementById('resetTeamsBtn')?.addEventListener('click', () => {
+            renderMatchForm(matchType);
           });
-          team2.forEach((p, i) => {
-            const select = document.querySelector(`select[name="team2_player${i + 1}"]`);
-            if (select) {
-              select.value = p.id;
-              updateCivDisplay(select);
-            }
-          });
-          randomResult.innerHTML = '<p class="text-green-400 text-center">Equipos aplicados!</p>';
+
+          // Re-setup winner buttons after DOM change
+          setupWinnerButtons();
         });
       });
 
@@ -389,23 +487,121 @@ const players = await db.users.findAll();
       });
     }
 
-    // Handle FFA add loser button
+    // Handle FFA player selection
     if (matchType === 'ffa') {
-      let loserCount = 1;
-      document.getElementById('addLoser')?.addEventListener('click', () => {
-        if (loserCount < players.length - 1) {
-          loserCount++;
-          const losersDiv = document.getElementById('ffaLosers');
-          const newLoser = document.createElement('div');
-          newLoser.innerHTML = createPlayerSelect(2, loserCount, `Perdedor ${loserCount}`);
-          losersDiv.appendChild(newLoser.firstElementChild);
+      const selectedFfaCount = document.getElementById('selectedFfaCount');
+      const applyFfaBtn = document.getElementById('applyFfaBtn');
+      let ffaPlayers = [];
 
-          // Add listener to new select
-          const newSelect = losersDiv.querySelector(`select[name="team2_player${loserCount}"]`);
-          if (newSelect) {
-            newSelect.addEventListener('change', () => updateCivDisplay(newSelect));
-          }
+      function updateFfaSelectedCount() {
+        const checked = document.querySelectorAll('.ffa-player-checkbox:checked').length;
+        selectedFfaCount.textContent = `${checked} jugadores seleccionados (mínimo 3)`;
+
+        if (checked >= 3) {
+          selectedFfaCount.classList.add('text-green-400');
+          selectedFfaCount.classList.remove('text-aoe-cream-dark');
+          applyFfaBtn.disabled = false;
+        } else {
+          selectedFfaCount.classList.remove('text-green-400');
+          selectedFfaCount.classList.add('text-aoe-cream-dark');
+          applyFfaBtn.disabled = true;
         }
+      }
+
+      document.querySelectorAll('.ffa-player-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateFfaSelectedCount);
+      });
+
+      // Apply FFA players
+      applyFfaBtn?.addEventListener('click', () => {
+        const checkboxes = document.querySelectorAll('.ffa-player-checkbox:checked');
+        ffaPlayers = Array.from(checkboxes).map(cb => ({
+          id: cb.value,
+          name: cb.dataset.name
+        }));
+
+        // Hide selection, show teams
+        document.querySelector('#ffaPlayerSelection').closest('.aoe-card').classList.add('hidden');
+        document.getElementById('ffaTeamsContainer').classList.remove('hidden');
+
+        // Create winner selection cards
+        const ffaWinnerCard = document.getElementById('ffaWinnerCard');
+        ffaWinnerCard.innerHTML = `
+          <h3 class="aoe-title text-lg mb-4 text-green-400">🏆 Ganador</h3>
+          <p class="text-sm text-aoe-cream-dark mb-3">Selecciona quién ganó:</p>
+          <div class="space-y-2" id="ffaWinnerSelection">
+            ${ffaPlayers.map(p => {
+              const player = playersMap[parseInt(p.id)];
+              const civ = player?.favoriteCiv || 'spanish';
+              return `
+                <label class="cursor-pointer block">
+                  <input type="radio" name="ffaWinner" value="${p.id}" class="peer hidden ffa-winner-radio" />
+                  <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border-2 border-aoe-gold/30 peer-checked:border-green-500 peer-checked:bg-green-500/10 transition-all hover:border-aoe-gold/50">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-aoe-gold/30 to-amber-900/40 flex items-center justify-center text-sm">
+                      👑
+                    </div>
+                    <div class="flex-1">
+                      <p class="font-semibold text-aoe-cream">${p.name}</p>
+                      <p class="text-xs text-aoe-cream-dark">${civ}</p>
+                    </div>
+                    <span class="hidden peer-checked:block text-green-400">✓</span>
+                  </div>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        `;
+
+        // Create losers display (will update when winner is selected)
+        const ffaLosersCard = document.getElementById('ffaLosersCard');
+        ffaLosersCard.innerHTML = `
+          <h3 class="aoe-title text-lg mb-4 text-red-400">💀 Perdedores</h3>
+          <div id="ffaLosersDisplay" class="space-y-2">
+            <p class="text-aoe-cream-dark text-sm text-center py-4">Selecciona un ganador primero</p>
+          </div>
+        `;
+
+        // Handle winner selection
+        document.querySelectorAll('.ffa-winner-radio').forEach(radio => {
+          radio.addEventListener('change', (e) => {
+            const winnerId = e.target.value;
+            const losers = ffaPlayers.filter(p => p.id !== winnerId);
+
+            // Update losers display
+            const ffaLosersDisplay = document.getElementById('ffaLosersDisplay');
+            ffaLosersDisplay.innerHTML = losers.map((p, i) => {
+              const player = playersMap[parseInt(p.id)];
+              const civ = player?.favoriteCiv || 'spanish';
+              return `
+                <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-red-500/30">
+                  <div class="w-8 h-8 rounded-full bg-gradient-to-br from-red-500/30 to-red-900/40 flex items-center justify-center text-sm">
+                    💀
+                  </div>
+                  <div class="flex-1">
+                    <p class="font-semibold text-aoe-cream">${p.name}</p>
+                    <p class="text-xs text-aoe-cream-dark">${civ}</p>
+                  </div>
+                  <input type="hidden" name="team2_player${i + 1}" value="${p.id}" />
+                </div>
+              `;
+            }).join('');
+
+            // Add hidden input for winner
+            const existingWinnerInput = document.querySelector('input[name="team1_player1"]');
+            if (existingWinnerInput) existingWinnerInput.remove();
+
+            const winnerInput = document.createElement('input');
+            winnerInput.type = 'hidden';
+            winnerInput.name = 'team1_player1';
+            winnerInput.value = winnerId;
+            ffaWinnerCard.appendChild(winnerInput);
+          });
+        });
+
+        // Reset button
+        document.getElementById('resetFfaBtn')?.addEventListener('click', () => {
+          renderMatchForm('ffa');
+        });
       });
     }
   }
@@ -669,3 +865,25 @@ const players = await db.users.findAll();
     window.location.href = '/matches';
   });
 </script>
+
+<style>
+  /* Player selection styling for randomizer and FFA */
+  .random-player-checkbox:checked + .player-card,
+  .ffa-player-checkbox:checked + .player-card {
+    border-color: #DAA520 !important;
+    background: linear-gradient(135deg, rgba(218, 165, 32, 0.3), rgba(139, 69, 19, 0.4)) !important;
+    box-shadow: 0 0 20px rgba(218, 165, 32, 0.6), inset 0 0 10px rgba(218, 165, 32, 0.2) !important;
+  }
+
+  .random-player-checkbox:checked + .player-card .player-name,
+  .ffa-player-checkbox:checked + .player-card .player-name {
+    color: #DAA520;
+    font-weight: 600;
+    text-shadow: 0 0 10px rgba(218, 165, 32, 0.5);
+  }
+
+  .random-player-checkbox:checked + .player-card .check-indicator,
+  .ffa-player-checkbox:checked + .player-card .check-indicator {
+    display: block !important;
+  }
+</style>

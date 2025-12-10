@@ -2,7 +2,8 @@
 import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
 
-const players = await db.users.findAll();
+const allPlayers = await db.users.findAll();
+const players = allPlayers.filter(p => p.username !== 'admin');
 ---
 
 <Layout title="Ruleta de Enfrentamientos">
