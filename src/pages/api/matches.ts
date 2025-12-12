@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../db';
+import { db, invalidateCache } from '../../db';
 import { calculate1v1Elo, calculateTeamElo, calculateFfaElo } from '../../lib/elo';
 
 interface Participant {
@@ -130,6 +130,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
         eloChange: eloChanges.get(p.playerId) || 0,
       });
     }
+
+    // Invalidar cache después de crear partida
+    invalidateCache();
 
     return new Response(JSON.stringify({ success: true, match }), {
       status: 200, headers: { 'Content-Type': 'application/json' },

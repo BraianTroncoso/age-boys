@@ -8,21 +8,16 @@ import { getCivilization } from '../../lib/civilizations';
 const currentUser = Astro.locals.user;
 const userIsAdmin = isAdmin(currentUser);
 
-// Ahora players = users
-const players = await db.users.findAllPlayers();
+// Obtener jugadores con stats en una sola consulta optimizada
+const players = await db.users.findAllPlayersWithStats();
 
-const playersWithStats = [];
-for (const player of players) {
-  const participations = await db.participants.findByPlayerId(player.id);
-  const wins = participations.filter(p => p.isWinner).length;
+const playersWithStats = players.map(player => {
   const favCiv = getCivilization(player.favoriteCiv);
-  playersWithStats.push({
+  return {
     ...player,
-    totalMatches: participations.length,
-    wins,
     civFlag: favCiv?.flag || '⚔️'
-  });
-}
+  };
+});
 ---
 
 <Layout title="Jugadores">

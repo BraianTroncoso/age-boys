@@ -1,6 +1,6 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { db } from '../db';
+import { db, statsQueries } from '../db';
 import { getRatingTier, getTierColor } from '../lib/elo';
 import { getCivilizationName, getCivilizationFlag } from '../lib/civilizations';
 import { getWeeklyLoser, getWeeklyPollera } from '../lib/stats';
@@ -17,41 +17,31 @@ const eloFieldMap: Record<string, 'eloRating' | 'eloTeams' | 'eloFfa'> = {
 };
 const eloField = eloFieldMap[rankingType] || 'eloRating';
 
-const players = await db.users.findAllPlayers(eloField);
-const allMatchesRaw = await db.matches.findAll();
-const matches = allMatchesRaw.slice(0, 5);
-
-// El boludo de la semana
-const weeklyLoser = await getWeeklyLoser();
-
-// El pollera de la semana
-const weeklyPollera = await getWeeklyPollera();
+// Consultas paralelas optimizadas
+const [players, recentMatches, weeklyLoser, weeklyPollera] = await Promise.all([
+  db.users.findAllPlayers(eloField),
+  db.matches.findRecentWithParticipants(5),
+  getWeeklyLoser(),
+  getWeeklyPollera()
+]);
 
 // El rey del ranking
 const topPlayer = players.length > 0 ? players[0] : null;
 
-// Calcular stats del top player
+// Calcular stats del top player (una sola consulta optimizada)
 let topPlayerStats = null;
 if (topPlayer) {
-  let wins = 0;
-  let losses = 0;
-
-  for (const match of allMatchesRaw) {
-    const participants = await db.participants.findByMatchId(match.id);
-    const playerParticipant = participants.find(p => p.playerId === topPlayer.id);
-    if (playerParticipant) {
-      if (playerParticipant.isWinner) wins++;
-      else losses++;
-    }
-  }
-
+  const stats = await statsQueries.getPlayerWinsLosses(topPlayer.id);
   topPlayerStats = {
-    wins,
-    losses,
-    total: wins + losses,
-    winRate: wins + losses > 0 ? Math.round((wins / (wins + losses)) * 100) : 0
+    wins: stats.wins,
+    losses: stats.losses,
+    total: stats.wins + stats.losses,
+    winRate: stats.wins + stats.losses > 0 ? Math.round((stats.wins / (stats.wins + stats.losses)) * 100) : 0
   };
 }
+
+// recentMatches ya viene con participantes incluidos
+const matchesWithParticipants = recentMatches;
 
 // Frases picantes para el #1
 const frasesTop = [
@@ -72,17 +62,6 @@ const frasesTop = [
 ];
 
 const fraseRandom = frasesTop[Math.floor(Math.random() * frasesTop.length)];
-
-const matchesWithParticipants = [];
-for (const match of matches) {
-  const rawParticipants = await db.participants.findByMatchId(match.id);
-  const participants = [];
-  for (const p of rawParticipants) {
-    const player = await db.users.findById(p.playerId);
-    participants.push({ ...p, playerName: player?.username || 'Unknown' });
-  }
-  matchesWithParticipants.push({ ...match, participants });
-}
 ---
 
 <Layout title="Rankings">
@@ -235,19 +214,19 @@ for (const match of matches) {
           <div class="flex flex-wrap gap-2 mb-4">
             <a
               href="/?ranking=1v1"
-              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === '1v1' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+              class={`ranking-tab px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm ${rankingType === '1v1' ? 'bg-aoe-gold text-aoe-brown-dark active' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
             >
               🏆 1v1
             </a>
             <a
               href="/?ranking=teams"
-              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === 'teams' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+              class={`ranking-tab px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm ${rankingType === 'teams' ? 'bg-aoe-gold text-aoe-brown-dark active' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
             >
               ⚔️ Teams
             </a>
             <a
               href="/?ranking=ffa"
-              class={`px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm transition-all ${rankingType === 'ffa' ? 'bg-aoe-gold text-aoe-brown-dark' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
+              class={`ranking-tab px-3 py-1.5 sm:px-4 sm:py-2 rounded-lg font-cinzel text-xs sm:text-sm ${rankingType === 'ffa' ? 'bg-aoe-gold text-aoe-brown-dark active' : 'bg-aoe-brown-light/50 text-aoe-cream hover:bg-aoe-brown-light'}`}
             >
               👑 FFA
             </a>
@@ -258,14 +237,14 @@ for (const match of matches) {
           </h2>
 
           {players.length === 0 ? (
-            <div class="text-center py-6 sm:py-8 text-aoe-cream-dark">
+            <div class="text-center py-6 sm:py-8 text-aoe-cream-dark ranking-content">
               <p>No hay jugadores registrados aún.</p>
               <a href="/players" class="text-aoe-gold hover:text-aoe-gold-light">
                 Agregar jugadores →
               </a>
             </div>
           ) : (
-            <div class="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0">
+            <div class="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 ranking-content">
               <table class="aoe-table">
                 <thead>
                   <tr>

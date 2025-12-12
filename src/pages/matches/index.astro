@@ -7,36 +7,17 @@ import { getCivilizationName } from '../../lib/civilizations';
 const ITEMS_PER_PAGE = 5;
 const currentPage = parseInt(Astro.url.searchParams.get('page') || '1');
 
-// Obtener todas las partidas y ordenar por fecha descendente
-const allMatchesRaw = await db.matches.findAll();
-const allMatches = allMatchesRaw.sort((a, b) =>
-  new Date(b.playedAt).getTime() - new Date(a.playedAt).getTime()
-);
+// Obtener partidas paginadas con participantes en una sola consulta optimizada
+const { matches: paginatedMatches, total: totalMatches } = await db.matches.findPaginatedWithParticipants(currentPage, ITEMS_PER_PAGE);
 
-const totalMatches = allMatches.length;
 const totalPages = Math.ceil(totalMatches / ITEMS_PER_PAGE);
 const validPage = Math.max(1, Math.min(currentPage, totalPages || 1));
 
-// Obtener partidas de la página actual
-const startIndex = (validPage - 1) * ITEMS_PER_PAGE;
-const paginatedMatches = allMatches.slice(startIndex, startIndex + ITEMS_PER_PAGE);
-
-const matchesWithParticipants = [];
-for (const match of paginatedMatches) {
-  const rawParticipants = await db.participants.findByMatchId(match.id);
-  const participants = [];
-  for (const p of rawParticipants) {
-    const player = await db.users.findById(p.playerId);
-    participants.push({ ...p, playerName: player?.username || 'Unknown' });
-  }
-  // Obtener el nombre del usuario que registró la partida
-  const createdByUser = match.createdBy ? await db.users.findById(match.createdBy) : null;
-  matchesWithParticipants.push({
-    ...match,
-    participants,
-    createdByName: createdByUser?.username || null
-  });
-}
+// Mapear a formato esperado por el template
+const matchesWithParticipants = paginatedMatches.map(match => ({
+  ...match,
+  createdByName: (match as any).creatorName || null
+}));
 
 // Generar array de páginas para mostrar
 const getPageNumbers = () => {

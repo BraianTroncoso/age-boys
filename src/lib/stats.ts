@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db, statsQueries } from '../db';
 
 // Frases para el boludo de la semana
 const frasesBoludoSemana = [
@@ -84,91 +84,35 @@ export function getFrasesBoludoSemana(): string[] {
 
 /**
  * Obtiene el boludo de la semana (más derrotas en los últimos 7 días)
+ * Optimizado: usa una sola consulta SQL con JOINs
  */
 export async function getWeeklyLoser() {
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const result = await statsQueries.getWeeklyLoserOptimized();
+  if (!result) return null;
 
-  const allMatches = await db.matches.findAll();
-  const recentMatches = allMatches.filter(m => new Date(m.playedAt) >= oneWeekAgo);
-
-  if (recentMatches.length === 0) return null;
-
-  // Contar derrotas por jugador
-  const lossCount: Record<number, number> = {};
-  const winCount: Record<number, number> = {};
-
-  for (const match of recentMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    for (const p of participants) {
-      if (!lossCount[p.playerId]) lossCount[p.playerId] = 0;
-      if (!winCount[p.playerId]) winCount[p.playerId] = 0;
-
-      if (p.isWinner) {
-        winCount[p.playerId]++;
-      } else {
-        lossCount[p.playerId]++;
-      }
-    }
-  }
-
-  // Encontrar el que más perdió (excluyendo admin)
-  let maxLosses = 0;
-  let loserId: number | null = null;
-
-  for (const [playerId, losses] of Object.entries(lossCount)) {
-    const player = await db.users.findById(parseInt(playerId));
-    // Excluir admin del boludo de la semana
-    if (player && player.username === 'admin') continue;
-
-    if (losses > maxLosses) {
-      maxLosses = losses;
-      loserId = parseInt(playerId);
-    }
-  }
-
-  if (!loserId || maxLosses === 0) return null;
-
-  const loser = await db.users.findById(loserId);
-  if (!loser) return null;
+  const player = await db.users.findById(result.playerId);
+  if (!player) return null;
 
   return {
-    player: loser,
-    losses: maxLosses,
-    wins: winCount[loserId] || 0,
+    player,
+    losses: result.losses,
+    wins: result.wins,
     frase: getRandomFrase(frasesBoludoSemana),
   };
 }
 
 /**
  * Obtiene la racha actual del jugador
+ * Optimizado: usa una sola consulta SQL
  */
 export async function getPlayerStreak(playerId: number) {
-  const allMatches = await db.matches.findAll();
-
-  // Obtener partidas del jugador ordenadas por fecha (más reciente primero)
-  const playerMatches: { matchId: number; playedAt: Date; isWinner: boolean }[] = [];
-
-  for (const match of allMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    const playerPart = participants.find(p => p.playerId === playerId);
-    if (playerPart) {
-      playerMatches.push({
-        matchId: match.id,
-        playedAt: new Date(match.playedAt),
-        isWinner: playerPart.isWinner,
-      });
-    }
-  }
+  const playerMatches = await statsQueries.getPlayerStreakOptimized(playerId);
 
   if (playerMatches.length === 0) {
     return { type: 'none', count: 0, frase: 'Sin partidas' };
   }
 
-  // Ordenar por fecha descendente
-  playerMatches.sort((a, b) => b.playedAt.getTime() - a.playedAt.getTime());
-
-  // Contar racha actual
+  // Ya viene ordenado por fecha DESC
   const firstResult = playerMatches[0].isWinner;
   let streak = 1;
 
@@ -201,65 +145,36 @@ export async function getPlayerStreak(playerId: number) {
 
 /**
  * Obtiene némesis y víctima del jugador (solo 1v1)
+ * Optimizado: usa una sola consulta SQL con JOINs
  */
 export async function getNemesisAndVictim(playerId: number) {
-  const allMatches = (await db.matches.findAll()).filter(m => m.matchType === '1v1');
+  const records = await statsQueries.getNemesisVictimOptimized(playerId);
 
-  // Record de victorias/derrotas contra cada oponente
-  const record: Record<number, { wins: number; losses: number; opponentName: string }> = {};
-
-  for (const match of allMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    const playerPart = participants.find(p => p.playerId === playerId);
-
-    if (!playerPart) continue;
-
-    const opponent = participants.find(p => p.playerId !== playerId);
-    if (!opponent) continue;
-
-    if (!record[opponent.playerId]) {
-      const opponentUser = await db.users.findById(opponent.playerId);
-      record[opponent.playerId] = {
-        wins: 0,
-        losses: 0,
-        opponentName: opponentUser?.username || 'Desconocido',
-      };
-    }
-
-    if (playerPart.isWinner) {
-      record[opponent.playerId].wins++;
-    } else {
-      record[opponent.playerId].losses++;
-    }
-  }
-
-  // Encontrar némesis (más derrotas)
   let nemesis: { playerId: number; name: string; wins: number; losses: number; frase: string } | null = null;
   let maxLosses = 0;
 
-  // Encontrar víctima (más victorias)
   let victim: { playerId: number; name: string; wins: number; losses: number; frase: string } | null = null;
   let maxWins = 0;
 
-  for (const [opponentId, stats] of Object.entries(record)) {
-    if (stats.losses > maxLosses && stats.losses >= 2) {
-      maxLosses = stats.losses;
+  for (const record of records) {
+    if (record.losses > maxLosses && record.losses >= 2) {
+      maxLosses = record.losses;
       nemesis = {
-        playerId: parseInt(opponentId),
-        name: stats.opponentName,
-        wins: stats.wins,
-        losses: stats.losses,
+        playerId: record.opponentId,
+        name: record.opponentName,
+        wins: record.wins,
+        losses: record.losses,
         frase: getRandomFrase(frasesNemesis),
       };
     }
 
-    if (stats.wins > maxWins && stats.wins >= 2) {
-      maxWins = stats.wins;
+    if (record.wins > maxWins && record.wins >= 2) {
+      maxWins = record.wins;
       victim = {
-        playerId: parseInt(opponentId),
-        name: stats.opponentName,
-        wins: stats.wins,
-        losses: stats.losses,
+        playerId: record.opponentId,
+        name: record.opponentName,
+        wins: record.wins,
+        losses: record.losses,
         frase: getRandomFrase(frasesVictima),
       };
     }
@@ -270,34 +185,10 @@ export async function getNemesisAndVictim(playerId: number) {
 
 /**
  * Obtiene estadísticas completas del jugador
+ * Optimizado: usa una sola consulta SQL
  */
 export async function getPlayerFullStats(playerId: number) {
-  const allMatches = await db.matches.findAll();
-  let totalWins = 0;
-  let totalLosses = 0;
-
-  const matchHistory: { playedAt: Date; isWinner: boolean }[] = [];
-
-  for (const match of allMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    const playerPart = participants.find(p => p.playerId === playerId);
-
-    if (playerPart) {
-      matchHistory.push({
-        playedAt: new Date(match.playedAt),
-        isWinner: playerPart.isWinner,
-      });
-
-      if (playerPart.isWinner) {
-        totalWins++;
-      } else {
-        totalLosses++;
-      }
-    }
-  }
-
-  // Ordenar por fecha
-  matchHistory.sort((a, b) => a.playedAt.getTime() - b.playedAt.getTime());
+  const data = await statsQueries.getPlayerFullStatsOptimized(playerId);
 
   // Calcular rachas máximas
   let maxWinStreak = 0;
@@ -305,7 +196,7 @@ export async function getPlayerFullStats(playerId: number) {
   let winStreak = 0;
   let lossStreak = 0;
 
-  for (const match of matchHistory) {
+  for (const match of data.history) {
     if (match.isWinner) {
       winStreak++;
       lossStreak = 0;
@@ -317,11 +208,13 @@ export async function getPlayerFullStats(playerId: number) {
     }
   }
 
+  const totalMatches = data.wins + data.losses;
+
   return {
-    totalWins,
-    totalLosses,
-    totalMatches: totalWins + totalLosses,
-    winRate: totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0,
+    totalWins: data.wins,
+    totalLosses: data.losses,
+    totalMatches,
+    winRate: totalMatches > 0 ? Math.round((data.wins / totalMatches) * 100) : 0,
     maxWinStreak,
     maxLossStreak,
   };
@@ -330,24 +223,11 @@ export async function getPlayerFullStats(playerId: number) {
 /**
  * Obtiene el pollera de la semana (el que menos partidas jugo en los ultimos 7 dias)
  * Si hay empate, rota aleatoriamente entre los candidatos
+ * Optimizado: usa consultas batch
  */
 export async function getWeeklyPollera() {
-  const oneWeekAgo = new Date();
-  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-
-  const allMatches = await db.matches.findAll();
-  const recentMatches = allMatches.filter(m => new Date(m.playedAt) >= oneWeekAgo);
-
-  // Contar partidas por jugador en la semana
-  const gamesCount: Record<number, number> = {};
-
-  for (const match of recentMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    for (const p of participants) {
-      if (!gamesCount[p.playerId]) gamesCount[p.playerId] = 0;
-      gamesCount[p.playerId]++;
-    }
-  }
+  // Obtener conteo de partidas de la semana en una sola consulta
+  const gamesCount = await statsQueries.getWeeklyGamesCountOptimized();
 
   // Obtener TODOS los jugadores (incluso los que no jugaron)
   const allPlayers = await db.users.findAllPlayers();
@@ -359,7 +239,7 @@ export async function getWeeklyPollera() {
   for (const player of allPlayers) {
     if (player.username === 'admin') continue;
 
-    const games = gamesCount[player.id] || 0;
+    const games = gamesCount.get(player.id) || 0;
     if (games < minGames) {
       minGames = games;
       candidates.length = 0;

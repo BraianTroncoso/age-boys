@@ -1,5 +1,6 @@
 ---
 import '../styles/global.css';
+import { ViewTransitions } from 'astro:transitions';
 
 interface Props {
   title: string;
@@ -16,6 +17,7 @@ const user = Astro.locals.user;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title} | AoE3 Tracker</title>
+    <ViewTransitions />
   </head>
   <body class="min-h-screen flex flex-col">
     {user && (

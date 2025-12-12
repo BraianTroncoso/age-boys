@@ -1,4 +1,4 @@
-import { db } from '../db';
+import { db, statsQueries } from '../db';
 import { getPlayerFullStats, getNemesisAndVictim } from './stats';
 
 export interface Achievement {
@@ -12,10 +12,16 @@ export interface Achievement {
   extra?: string;
 }
 
-export async function getPlayerAchievements(playerId: number): Promise<Achievement[]> {
+// Versión optimizada que acepta stats pre-calculados para evitar duplicación
+export async function getPlayerAchievements(
+  playerId: number,
+  preloadedStats?: { fullStats: Awaited<ReturnType<typeof getPlayerFullStats>>; nemesisVictim: Awaited<ReturnType<typeof getNemesisAndVictim>> }
+): Promise<Achievement[]> {
   const achievements: Achievement[] = [];
-  const stats = await getPlayerFullStats(playerId);
-  const { nemesis, victim } = await getNemesisAndVictim(playerId);
+
+  // Usar stats pre-cargados si se proporcionan, sino calcularlos
+  const stats = preloadedStats?.fullStats ?? await getPlayerFullStats(playerId);
+  const { nemesis, victim } = preloadedStats?.nemesisVictim ?? await getNemesisAndVictim(playerId);
 
   if (stats.totalWins >= 1) {
     achievements.push({ id: 'first_blood', name: 'Primera Sangre', description: 'Ganaste tu primera partida', icon: '🩸', type: 'glory', unlocked: true });
@@ -75,21 +81,9 @@ export async function getPlayerAchievements(playerId: number): Promise<Achieveme
   return achievements;
 }
 
+// Optimizado: usa una sola consulta SQL
 async function getFirstMatchResult(playerId: number): Promise<boolean | null> {
-  const allMatches = await db.matches.findAll();
-  const playerMatches: { playedAt: Date; isWinner: boolean }[] = [];
-
-  for (const match of allMatches) {
-    const participants = await db.participants.findByMatchId(match.id);
-    const playerPart = participants.find(p => p.playerId === playerId);
-    if (playerPart) {
-      playerMatches.push({ playedAt: new Date(match.playedAt), isWinner: playerPart.isWinner });
-    }
-  }
-
-  if (playerMatches.length === 0) return null;
-  playerMatches.sort((a, b) => a.playedAt.getTime() - b.playedAt.getTime());
-  return playerMatches[0].isWinner;
+  return statsQueries.getFirstMatchResult(playerId);
 }
 
 export function countAchievementsByType(achievements: Achievement[]) {

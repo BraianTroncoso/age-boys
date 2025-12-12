@@ -1,6 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { db } from '../../db';
+import { db, statsQueries } from '../../db';
 import { getRatingTier, getTierColor } from '../../lib/elo';
 import { getCivilizationName, getCivilizationFlag, getCivilizationFlagUrl, getCivilizationColors } from '../../lib/civilizations';
 import { getPlayerStreak, getNemesisAndVictim, getPlayerFullStats } from '../../lib/stats';
@@ -16,16 +16,24 @@ if (!player) {
   return Astro.redirect('/players');
 }
 
-// Get player participations
-const participations = await db.participants.findByPlayerId(playerId);
+// Consultas paralelas optimizadas
+const [participations, recentMatches, streak, nemesisVictim, fullStats] = await Promise.all([
+  db.participants.findByPlayerId(playerId),
+  statsQueries.getPlayerRecentMatches(playerId, 10),
+  getPlayerStreak(playerId),
+  getNemesisAndVictim(playerId),
+  getPlayerFullStats(playerId)
+]);
 
-// Calculate stats
+const { nemesis, victim } = nemesisVictim;
+
+// Calculate stats from participations
 const totalMatches = participations.length;
 const wins = participations.filter(p => p.isWinner).length;
 const losses = totalMatches - wins;
 const winRate = totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0;
 
-// Get civilization stats
+// Get civilization stats from participations (ya cargadas)
 const civStatsMap = new Map<string, { count: number; wins: number }>();
 for (const p of participations) {
   const current = civStatsMap.get(p.civilization) || { count: 0, wins: 0 };
@@ -37,29 +45,8 @@ const civStats = Array.from(civStatsMap.entries())
   .map(([civilization, stats]) => ({ civilization, ...stats }))
   .sort((a, b) => b.count - a.count);
 
-// Get recent matches with details
-const allMatches = await db.matches.findAll();
-const recentMatches = participations
-  .map(p => {
-    const match = allMatches.find(m => m.id === p.matchId);
-    return match ? {
-      matchId: match.id,
-      matchType: match.matchType,
-      playedAt: match.playedAt,
-      civilization: p.civilization,
-      isWinner: p.isWinner,
-      eloChange: p.eloChange,
-    } : null;
-  })
-  .filter(Boolean)
-  .sort((a, b) => new Date(b!.playedAt).getTime() - new Date(a!.playedAt).getTime())
-  .slice(0, 10);
-
-// Nuevas stats picantes
-const streak = await getPlayerStreak(playerId);
-const { nemesis, victim } = await getNemesisAndVictim(playerId);
-const fullStats = await getPlayerFullStats(playerId);
-const achievements = await getPlayerAchievements(playerId);
+// Achievements con stats pre-cargados para evitar duplicación
+const achievements = await getPlayerAchievements(playerId, { fullStats, nemesisVictim });
 const achievementCounts = countAchievementsByType(achievements);
 
 const [color1, color2] = getCivilizationColors(player.favoriteCiv);

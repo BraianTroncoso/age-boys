@@ -1,5 +1,5 @@
 import type { APIRoute } from 'astro';
-import { db } from '../../../db';
+import { db, invalidateCache } from '../../../db';
 
 export const POST: APIRoute = async ({ request, locals }) => {
   const user = locals.user;
@@ -45,6 +45,9 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // 3. Eliminar partida (y participantes en cascada)
     await db.matches.delete(matchId);
+
+    // Invalidar cache
+    invalidateCache();
 
     return new Response(JSON.stringify({
       success: true,

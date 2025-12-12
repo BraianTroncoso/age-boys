@@ -102,6 +102,14 @@ async function initTables() {
     )
   `);
 
+  // Índices para mejorar rendimiento de consultas
+  try {
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_participants_player ON match_participants(playerId)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(matchId)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_matches_played ON matches(playedAt DESC)`);
+    await client.execute(`CREATE INDEX IF NOT EXISTS idx_users_elo ON users(eloRating DESC)`);
+  } catch (e) { /* Indices may already exist */ }
+
   await client.execute(`
     CREATE TABLE IF NOT EXISTS tournaments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -160,6 +168,28 @@ async function ensureInit() {
   }
 }
 
+// Simple in-memory cache with TTL
+const cache = new Map<string, { data: any; expires: number }>();
+const CACHE_TTL = 5000; // 5 seconds
+
+function getCached<T>(key: string): T | null {
+  const cached = cache.get(key);
+  if (cached && Date.now() < cached.expires) {
+    return cached.data as T;
+  }
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: any): void {
+  cache.set(key, { data, expires: Date.now() + CACHE_TTL });
+}
+
+// Clear cache when data changes
+export function invalidateCache(): void {
+  cache.clear();
+}
+
 // Database operations
 export const db = {
   users: {
@@ -170,9 +200,41 @@ export const db = {
     },
     findAllPlayers: async (orderBy: 'eloRating' | 'eloTeams' | 'eloFfa' = 'eloRating'): Promise<User[]> => {
       await ensureInit();
+      const cacheKey = `players_${orderBy}`;
+      const cached = getCached<User[]>(cacheKey);
+      if (cached) return cached;
+
       // Excluir admin del ranking
       const result = await client.execute(`SELECT * FROM users WHERE username != 'admin' ORDER BY ${orderBy} DESC`);
-      return result.rows as unknown as User[];
+      const data = result.rows as unknown as User[];
+      setCache(cacheKey, data);
+      return data;
+    },
+    findAllPlayersWithStats: async (orderBy: 'eloRating' | 'eloTeams' | 'eloFfa' = 'eloRating'): Promise<Array<User & { totalMatches: number; wins: number }>> => {
+      await ensureInit();
+      const cacheKey = `players_stats_${orderBy}`;
+      const cached = getCached<Array<User & { totalMatches: number; wins: number }>>(cacheKey);
+      if (cached) return cached;
+
+      // Una sola consulta con LEFT JOIN y agregación
+      const result = await client.execute(`
+        SELECT
+          u.*,
+          COUNT(mp.id) as totalMatches,
+          SUM(CASE WHEN mp.isWinner = 1 THEN 1 ELSE 0 END) as wins
+        FROM users u
+        LEFT JOIN match_participants mp ON u.id = mp.playerId
+        WHERE u.username != 'admin'
+        GROUP BY u.id
+        ORDER BY u.${orderBy} DESC
+      `);
+      const data = result.rows.map((row: any) => ({
+        ...row,
+        totalMatches: row.totalMatches || 0,
+        wins: row.wins || 0
+      })) as Array<User & { totalMatches: number; wins: number }>;
+      setCache(cacheKey, data);
+      return data;
     },
     findByUsername: async (username: string): Promise<User | undefined> => {
       await ensureInit();
@@ -255,6 +317,117 @@ export const db = {
       await ensureInit();
       const result = await client.execute('SELECT * FROM matches ORDER BY playedAt DESC');
       return result.rows as unknown as Match[];
+    },
+    findRecentWithParticipants: async (limit: number = 5): Promise<Array<Match & { participants: Array<MatchParticipant & { playerName: string }> }>> => {
+      await ensureInit();
+      // Single query with JOIN to get matches + participants + player names
+      const result = await client.execute({
+        sql: `
+          SELECT
+            m.id as matchId, m.matchType, m.playedAt, m.createdBy, m.createdAt,
+            mp.id as participantId, mp.playerId, mp.team, mp.civilization, mp.isWinner, mp.eloChange,
+            u.username as playerName
+          FROM matches m
+          LEFT JOIN match_participants mp ON m.id = mp.matchId
+          LEFT JOIN users u ON mp.playerId = u.id
+          ORDER BY m.playedAt DESC
+          LIMIT ?
+        `,
+        args: [limit * 10] // Get enough rows to cover participants
+      });
+
+      // Group by match
+      const matchesMap = new Map<number, Match & { participants: Array<MatchParticipant & { playerName: string }> }>();
+
+      for (const row of result.rows as any[]) {
+        if (!matchesMap.has(row.matchId)) {
+          matchesMap.set(row.matchId, {
+            id: row.matchId,
+            matchType: row.matchType,
+            playedAt: row.playedAt,
+            createdBy: row.createdBy,
+            createdAt: row.createdAt,
+            participants: []
+          });
+        }
+
+        if (row.participantId) {
+          matchesMap.get(row.matchId)!.participants.push({
+            id: row.participantId,
+            matchId: row.matchId,
+            playerId: row.playerId,
+            team: row.team,
+            civilization: row.civilization,
+            isWinner: Boolean(row.isWinner),
+            eloChange: row.eloChange,
+            playerName: row.playerName || 'Unknown'
+          });
+        }
+      }
+
+      // Return only the requested number of matches
+      return Array.from(matchesMap.values()).slice(0, limit);
+    },
+    countAll: async (): Promise<number> => {
+      await ensureInit();
+      const result = await client.execute('SELECT COUNT(*) as count FROM matches');
+      return (result.rows[0] as any).count;
+    },
+    findPaginatedWithParticipants: async (page: number = 1, perPage: number = 5): Promise<{ matches: Array<Match & { participants: Array<MatchParticipant & { playerName: string; creatorName?: string }> }>; total: number }> => {
+      await ensureInit();
+      const offset = (page - 1) * perPage;
+
+      // Get total count
+      const countResult = await client.execute('SELECT COUNT(*) as count FROM matches');
+      const total = (countResult.rows[0] as any).count;
+
+      // Get paginated matches with participants in one query
+      const result = await client.execute({
+        sql: `
+          SELECT
+            m.id as matchId, m.matchType, m.playedAt, m.createdBy, m.createdAt,
+            mp.id as participantId, mp.playerId, mp.team, mp.civilization, mp.isWinner, mp.eloChange,
+            u.username as playerName,
+            creator.username as creatorName
+          FROM (SELECT * FROM matches ORDER BY playedAt DESC LIMIT ? OFFSET ?) m
+          LEFT JOIN match_participants mp ON m.id = mp.matchId
+          LEFT JOIN users u ON mp.playerId = u.id
+          LEFT JOIN users creator ON m.createdBy = creator.id
+          ORDER BY m.playedAt DESC
+        `,
+        args: [perPage, offset]
+      });
+
+      const matchesMap = new Map<number, Match & { participants: Array<MatchParticipant & { playerName: string }>; creatorName?: string }>();
+
+      for (const row of result.rows as any[]) {
+        if (!matchesMap.has(row.matchId)) {
+          matchesMap.set(row.matchId, {
+            id: row.matchId,
+            matchType: row.matchType,
+            playedAt: row.playedAt,
+            createdBy: row.createdBy,
+            createdAt: row.createdAt,
+            creatorName: row.creatorName,
+            participants: []
+          });
+        }
+
+        if (row.participantId) {
+          matchesMap.get(row.matchId)!.participants.push({
+            id: row.participantId,
+            matchId: row.matchId,
+            playerId: row.playerId,
+            team: row.team,
+            civilization: row.civilization,
+            isWinner: Boolean(row.isWinner),
+            eloChange: row.eloChange,
+            playerName: row.playerName || 'Unknown'
+          });
+        }
+      }
+
+      return { matches: Array.from(matchesMap.values()), total };
     },
     findById: async (id: number): Promise<Match | undefined> => {
       await ensureInit();
@@ -541,6 +714,250 @@ export const db = {
         bracket: row.bracket || 'winners'
       })) as TournamentMatch[];
     }
+  }
+};
+
+// Optimized stats queries
+export const statsQueries = {
+  getPlayerWinsLosses: async (playerId: number): Promise<{ wins: number; losses: number }> => {
+    await ensureInit();
+    const result = await client.execute({
+      sql: `
+        SELECT
+          SUM(CASE WHEN isWinner = 1 THEN 1 ELSE 0 END) as wins,
+          SUM(CASE WHEN isWinner = 0 THEN 1 ELSE 0 END) as losses
+        FROM match_participants
+        WHERE playerId = ?
+      `,
+      args: [playerId]
+    });
+    const row = result.rows[0] as any;
+    return { wins: row.wins || 0, losses: row.losses || 0 };
+  },
+
+  getWeeklyLoserOptimized: async (): Promise<{ playerId: number; username: string; losses: number; wins: number } | null> => {
+    await ensureInit();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const weekAgoStr = oneWeekAgo.toISOString();
+
+    const result = await client.execute({
+      sql: `
+        SELECT
+          u.id as playerId,
+          u.username,
+          SUM(CASE WHEN mp.isWinner = 0 THEN 1 ELSE 0 END) as losses,
+          SUM(CASE WHEN mp.isWinner = 1 THEN 1 ELSE 0 END) as wins
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        JOIN users u ON mp.playerId = u.id
+        WHERE m.playedAt >= ? AND u.username != 'admin'
+        GROUP BY mp.playerId
+        ORDER BY losses DESC
+        LIMIT 1
+      `,
+      args: [weekAgoStr]
+    });
+
+    if (!result.rows[0]) return null;
+    const row = result.rows[0] as any;
+    if (row.losses === 0) return null;
+    return {
+      playerId: row.playerId,
+      username: row.username,
+      losses: row.losses,
+      wins: row.wins
+    };
+  },
+
+  getWeeklyPolleraOptimized: async (): Promise<{ playerId: number; username: string; gamesPlayed: number } | null> => {
+    await ensureInit();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const weekAgoStr = oneWeekAgo.toISOString();
+
+    const result = await client.execute({
+      sql: `
+        SELECT
+          u.id as playerId,
+          u.username,
+          COUNT(*) as gamesPlayed
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        JOIN users u ON mp.playerId = u.id
+        WHERE m.playedAt >= ? AND u.username != 'admin'
+        GROUP BY mp.playerId
+        ORDER BY gamesPlayed ASC
+        LIMIT 1
+      `,
+      args: [weekAgoStr]
+    });
+
+    if (!result.rows[0]) return null;
+    const row = result.rows[0] as any;
+    return {
+      playerId: row.playerId,
+      username: row.username,
+      gamesPlayed: row.gamesPlayed
+    };
+  },
+
+  getAllPlayersStats: async (): Promise<Map<number, { wins: number; losses: number }>> => {
+    await ensureInit();
+    const result = await client.execute(`
+      SELECT
+        playerId,
+        SUM(CASE WHEN isWinner = 1 THEN 1 ELSE 0 END) as wins,
+        SUM(CASE WHEN isWinner = 0 THEN 1 ELSE 0 END) as losses
+      FROM match_participants
+      GROUP BY playerId
+    `);
+
+    const statsMap = new Map<number, { wins: number; losses: number }>();
+    for (const row of result.rows as any[]) {
+      statsMap.set(row.playerId, { wins: row.wins || 0, losses: row.losses || 0 });
+    }
+    return statsMap;
+  },
+
+  getPlayerStreakOptimized: async (playerId: number): Promise<Array<{ matchId: number; playedAt: string; isWinner: boolean }>> => {
+    await ensureInit();
+    const result = await client.execute({
+      sql: `
+        SELECT m.id as matchId, m.playedAt, mp.isWinner
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        WHERE mp.playerId = ?
+        ORDER BY m.playedAt DESC
+      `,
+      args: [playerId]
+    });
+    return result.rows.map((row: any) => ({
+      matchId: row.matchId,
+      playedAt: row.playedAt,
+      isWinner: Boolean(row.isWinner)
+    }));
+  },
+
+  getPlayerFullStatsOptimized: async (playerId: number): Promise<{ wins: number; losses: number; history: Array<{ playedAt: string; isWinner: boolean }> }> => {
+    await ensureInit();
+    const result = await client.execute({
+      sql: `
+        SELECT m.playedAt, mp.isWinner
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        WHERE mp.playerId = ?
+        ORDER BY m.playedAt ASC
+      `,
+      args: [playerId]
+    });
+
+    let wins = 0;
+    let losses = 0;
+    const history: Array<{ playedAt: string; isWinner: boolean }> = [];
+
+    for (const row of result.rows as any[]) {
+      const isWinner = Boolean(row.isWinner);
+      history.push({ playedAt: row.playedAt, isWinner });
+      if (isWinner) wins++;
+      else losses++;
+    }
+
+    return { wins, losses, history };
+  },
+
+  getNemesisVictimOptimized: async (playerId: number): Promise<Array<{ opponentId: number; opponentName: string; wins: number; losses: number }>> => {
+    await ensureInit();
+    // Get 1v1 matches with opponent info in one query
+    const result = await client.execute({
+      sql: `
+        SELECT
+          opponent.playerId as opponentId,
+          u.username as opponentName,
+          SUM(CASE WHEN player.isWinner = 1 THEN 1 ELSE 0 END) as wins,
+          SUM(CASE WHEN player.isWinner = 0 THEN 1 ELSE 0 END) as losses
+        FROM match_participants player
+        JOIN matches m ON player.matchId = m.id
+        JOIN match_participants opponent ON m.id = opponent.matchId AND opponent.playerId != player.playerId
+        JOIN users u ON opponent.playerId = u.id
+        WHERE player.playerId = ? AND m.matchType = '1v1'
+        GROUP BY opponent.playerId
+      `,
+      args: [playerId]
+    });
+
+    return result.rows.map((row: any) => ({
+      opponentId: row.opponentId,
+      opponentName: row.opponentName,
+      wins: row.wins || 0,
+      losses: row.losses || 0
+    }));
+  },
+
+  getWeeklyGamesCountOptimized: async (): Promise<Map<number, number>> => {
+    await ensureInit();
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const weekAgoStr = oneWeekAgo.toISOString();
+
+    const result = await client.execute({
+      sql: `
+        SELECT mp.playerId, COUNT(*) as gamesPlayed
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        WHERE m.playedAt >= ?
+        GROUP BY mp.playerId
+      `,
+      args: [weekAgoStr]
+    });
+
+    const gamesMap = new Map<number, number>();
+    for (const row of result.rows as any[]) {
+      gamesMap.set(row.playerId, row.gamesPlayed);
+    }
+    return gamesMap;
+  },
+
+  getFirstMatchResult: async (playerId: number): Promise<boolean | null> => {
+    await ensureInit();
+    const result = await client.execute({
+      sql: `
+        SELECT mp.isWinner
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        WHERE mp.playerId = ?
+        ORDER BY m.playedAt ASC
+        LIMIT 1
+      `,
+      args: [playerId]
+    });
+
+    if (!result.rows[0]) return null;
+    return Boolean((result.rows[0] as any).isWinner);
+  },
+
+  getPlayerRecentMatches: async (playerId: number, limit: number = 10): Promise<Array<{ matchId: number; matchType: string; playedAt: string; civilization: string; isWinner: boolean; eloChange: number }>> => {
+    await ensureInit();
+    const result = await client.execute({
+      sql: `
+        SELECT m.id as matchId, m.matchType, m.playedAt, mp.civilization, mp.isWinner, mp.eloChange
+        FROM match_participants mp
+        JOIN matches m ON mp.matchId = m.id
+        WHERE mp.playerId = ?
+        ORDER BY m.playedAt DESC
+        LIMIT ?
+      `,
+      args: [playerId, limit]
+    });
+
+    return result.rows.map((row: any) => ({
+      matchId: row.matchId,
+      matchType: row.matchType,
+      playedAt: row.playedAt,
+      civilization: row.civilization,
+      isWinner: Boolean(row.isWinner),
+      eloChange: row.eloChange
+    }));
   }
 };
 

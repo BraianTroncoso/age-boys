@@ -81,8 +81,8 @@ const players = allPlayers.filter(p => p.username !== 'admin');
   </div>
 
   <!-- Modal de Victoria/Derrota -->
-  <div id="resultModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-2 sm:p-4 backdrop-blur-md bg-black/90">
-    <div class="text-center space-y-3 sm:space-y-4 w-full max-w-4xl">
+  <div id="resultModal" class="modal-backdrop fixed inset-0 z-50 hidden items-center justify-center p-2 sm:p-4 backdrop-blur-md bg-black/90">
+    <div class="modal-content text-center space-y-3 sm:space-y-4 w-full max-w-4xl">
       <canvas id="memeCanvas" class="mx-auto border-2 sm:border-4 border-aoe-gold rounded-lg shadow-[0_0_50px_rgba(218,165,32,0.5)] max-w-full h-auto" width="800" height="500"></canvas>
 
       <div class="flex flex-col sm:flex-row gap-2 sm:gap-4 justify-center px-4">
@@ -694,9 +694,9 @@ const players = allPlayers.filter(p => p.username !== 'admin');
           .filter(p => p.isWinner)
           .map(p => playersMap[p.playerId]?.username || 'Desconocido');
 
-        // Generar meme y mostrar modal
+        // Generar meme y mostrar modal con animación
         generateMeme(losers, winners);
-        document.getElementById('resultModal')?.classList.remove('hidden');
+        showModal();
       } else {
         errorDiv.textContent = result.error || 'Error al registrar partida';
         errorDiv?.classList.remove('hidden');
@@ -851,6 +851,44 @@ const players = allPlayers.filter(p => p.username !== 'admin');
     ctx.shadowColor = 'transparent';
   }
 
+  // Modal animation functions
+  function showModal() {
+    const modal = document.getElementById('resultModal');
+    const content = modal?.querySelector('.modal-content');
+
+    if (modal && content) {
+      // Remove exit classes if present
+      modal.classList.remove('modal-exit');
+      content.classList.remove('modal-exit');
+
+      // Show modal and add enter animation
+      modal.classList.remove('hidden');
+      modal.classList.add('flex', 'modal-enter');
+      content.classList.add('modal-enter');
+    }
+  }
+
+  function hideModal(callback) {
+    const modal = document.getElementById('resultModal');
+    const content = modal?.querySelector('.modal-content');
+
+    if (modal && content) {
+      // Remove enter classes and add exit animation
+      modal.classList.remove('modal-enter');
+      content.classList.remove('modal-enter');
+      modal.classList.add('modal-exit');
+      content.classList.add('modal-exit');
+
+      // Wait for animation to complete
+      setTimeout(() => {
+        modal.classList.remove('flex', 'modal-exit');
+        modal.classList.add('hidden');
+        content.classList.remove('modal-exit');
+        if (callback) callback();
+      }, 300);
+    }
+  }
+
   // Descargar imagen
   document.getElementById('downloadBtn')?.addEventListener('click', () => {
     const canvas = document.getElementById('memeCanvas');
@@ -860,9 +898,11 @@ const players = allPlayers.filter(p => p.username !== 'admin');
     link.click();
   });
 
-  // Cerrar modal
+  // Cerrar modal con animación
   document.getElementById('closeModalBtn')?.addEventListener('click', () => {
-    window.location.href = '/matches';
+    hideModal(() => {
+      window.location.href = '/matches';
+    });
   });
 </script>
 
