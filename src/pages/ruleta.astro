@@ -35,7 +35,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
                 <input type="checkbox" value={p.id} data-name={p.username} class="peer hidden player-checkbox" />
                 <div class="player-card aoe-card text-center border-2 border-aoe-gold/30 peer-checked:border-aoe-gold peer-checked:bg-gradient-to-br peer-checked:from-aoe-gold/30 peer-checked:to-amber-900/40 peer-checked:shadow-[0_0_20px_rgba(218,165,32,0.6)] transition-all py-3">
                   <span class="player-name text-sm block">{p.username}</span>
-                  <span class="check-indicator hidden text-green-400 text-lg mt-1">✓</span>
+                  <span class="check-indicator text-green-400 text-lg">✓</span>
                 </div>
               </label>
             ))}
@@ -342,9 +342,5 @@ const players = allPlayers.filter(p => p.username !== 'admin');
     color: #DAA520;
     font-weight: 600;
     text-shadow: 0 0 10px rgba(218, 165, 32, 0.5);
-  }
-
-  .player-checkbox:checked + .player-card .check-indicator {
-    display: block !important;
   }
 </style>

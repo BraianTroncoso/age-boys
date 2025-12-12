@@ -1,0 +1,499 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const allPlayers = await db.users.findAll();
+const players = allPlayers.filter(p => p.username !== 'admin');
+---
+
+<Layout title="Nuevo Torneo">
+  <div class="max-w-4xl mx-auto space-y-6">
+    <!-- Header -->
+    <div class="text-center">
+      <h1 class="aoe-title text-2xl sm:text-3xl">Crear Torneo</h1>
+      <p class="text-aoe-cream-dark mt-2">Configura tu torneo de eliminacion directa</p>
+    </div>
+
+    <!-- Step 1: Configuracion -->
+    <section class="aoe-panel" id="step1">
+      <h2 class="font-cinzel text-xl text-aoe-gold mb-4">1. Configuracion</h2>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm text-aoe-cream-dark mb-2">Nombre del Torneo</label>
+          <input
+            type="text"
+            id="tournamentName"
+            class="aoe-input w-full"
+            placeholder="Ej: Copa Navidad 2024"
+            maxlength="50"
+          />
+        </div>
+
+        <div>
+          <label class="block text-sm text-aoe-cream-dark mb-2">Cantidad de Jugadores</label>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <button type="button" class="size-btn aoe-btn" data-size="4">4 Jugadores</button>
+            <button type="button" class="size-btn aoe-btn" data-size="6">6 Jugadores</button>
+            <button type="button" class="size-btn aoe-btn" data-size="8">8 Jugadores</button>
+            <button type="button" class="size-btn aoe-btn" data-size="16">16 Jugadores</button>
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm text-aoe-cream-dark mb-2">Tipo de Eliminacion</label>
+          <div class="flex gap-3">
+            <button type="button" class="type-btn aoe-btn flex-1 aoe-btn-primary" data-type="single">
+              Eliminacion Directa
+            </button>
+            <button type="button" class="type-btn aoe-btn flex-1" data-type="double">
+              Doble Eliminacion
+            </button>
+          </div>
+          <p class="text-xs text-aoe-cream-dark/70 mt-2">
+            <span class="type-description" data-for="single">Una derrota y quedas eliminado</span>
+            <span class="type-description hidden" data-for="double">Los perdedores tienen segunda oportunidad en el Losers Bracket</span>
+          </p>
+        </div>
+
+        <!-- Modo Competitivo (afecta ELO) -->
+        <div>
+          <label class="flex items-center gap-3 cursor-pointer p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30 hover:border-aoe-gold/50 transition-colors">
+            <input type="checkbox" id="affectsElo" checked class="w-5 h-5 accent-aoe-gold" />
+            <div>
+              <span class="text-aoe-cream font-medium">Modo Competitivo</span>
+              <p class="text-xs text-aoe-cream-dark mt-1">
+                Las partidas afectan el ranking ELO de los jugadores
+              </p>
+            </div>
+          </label>
+          <p id="casualModeNote" class="text-xs text-amber-400 mt-2 hidden">
+            Modo Diversion: Las partidas NO afectaran el ELO
+          </p>
+        </div>
+
+        <!-- Bracket Reset Option (solo para doble eliminacion) -->
+        <div id="bracketResetOption" class="hidden">
+          <label class="flex items-center gap-3 cursor-pointer p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30 hover:border-aoe-gold/50 transition-colors">
+            <input type="checkbox" id="bracketReset" checked class="w-5 h-5 accent-aoe-gold" />
+            <div>
+              <span class="text-aoe-cream font-medium">Final Reset</span>
+              <p class="text-xs text-aoe-cream-dark mt-1">
+                Si el campeon del Losers Bracket gana la Gran Final, se juega una final extra
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <!-- Boton Confirmar Configuracion -->
+        <div class="mt-6 pt-4 border-t border-aoe-gold/20">
+          <button type="button" id="confirmConfigBtn" class="aoe-btn-primary w-full" disabled>
+            Confirmar Configuracion
+          </button>
+          <p id="configError" class="text-red-400 text-sm mt-2 text-center hidden"></p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Step 2: Seleccionar Jugadores -->
+    <section class="aoe-panel hidden" id="step2">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-cinzel text-xl text-aoe-gold">
+          2. Seleccionar Jugadores
+          <span id="selectedCount" class="text-base text-aoe-cream-dark font-normal ml-2">(0/0)</span>
+        </h2>
+        <button type="button" id="backToStep1" class="text-aoe-gold hover:text-aoe-gold-light text-sm flex items-center gap-1">
+          <span>←</span> Volver
+        </button>
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3" id="playerSelection">
+        {players.map(p => (
+          <label class="cursor-pointer group">
+            <input type="checkbox" value={p.id} data-name={p.username} class="peer hidden player-checkbox" />
+            <div class="player-card aoe-card text-center border-2 border-aoe-gold/30 peer-checked:border-aoe-gold peer-checked:bg-gradient-to-br peer-checked:from-aoe-gold/30 peer-checked:to-amber-900/40 peer-checked:shadow-[0_0_20px_rgba(218,165,32,0.6)] transition-all py-3 hover:border-aoe-gold/50">
+              <span class="player-name block font-cinzel">{p.username}</span>
+              <span class="check-indicator text-green-400 text-lg">✓</span>
+            </div>
+          </label>
+        ))}
+      </div>
+
+      <div class="mt-4 flex justify-end">
+        <button type="button" id="sortearBtn" class="aoe-btn-primary" disabled>
+          Sortear Emparejamientos
+        </button>
+      </div>
+    </section>
+
+    <!-- Step 3: Sorteo y Vista Previa -->
+    <section class="aoe-panel hidden" id="step3">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="font-cinzel text-xl text-aoe-gold">3. Sorteo de Emparejamientos</h2>
+        <button type="button" id="backToStep2" class="text-aoe-gold hover:text-aoe-gold-light text-sm flex items-center gap-1">
+          <span>←</span> Volver
+        </button>
+      </div>
+
+      <!-- Ruleta -->
+      <div class="flex flex-col items-center mb-6">
+        <div class="relative w-64 h-64 sm:w-80 sm:h-80">
+          <!-- Pointer -->
+          <div class="absolute -top-4 left-1/2 transform -translate-x-1/2 z-20">
+            <div class="w-0 h-0 border-l-[15px] border-r-[15px] border-t-[25px] border-l-transparent border-r-transparent border-t-aoe-gold drop-shadow-lg"></div>
+          </div>
+
+          <!-- Wheel -->
+          <div id="wheel" class="w-full h-full rounded-full border-8 border-amber-700 shadow-[inset_0_0_30px_rgba(0,0,0,0.5),0_0_20px_rgba(139,69,19,0.5)] transition-transform duration-[5000ms] ease-out relative overflow-hidden">
+            <div id="wheelContent" class="absolute inset-0"></div>
+          </div>
+
+          <!-- Center button -->
+          <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-gradient-to-br from-amber-600 to-amber-800 border-4 border-aoe-gold shadow-lg flex items-center justify-center z-10">
+            <span class="text-2xl">⚔️</span>
+          </div>
+        </div>
+
+        <button type="button" id="spinBtn" class="aoe-btn-primary mt-6 text-lg px-8">
+          SORTEAR
+        </button>
+      </div>
+
+      <!-- Preview de emparejamientos -->
+      <div id="matchPreview" class="hidden">
+        <h3 class="font-cinzel text-lg text-aoe-cream mb-4 text-center">Emparejamientos</h3>
+        <div id="matchList" class="space-y-2 max-w-md mx-auto"></div>
+
+        <div class="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+          <button type="button" id="reshuffleBtn" class="aoe-btn">
+            Volver a Sortear
+          </button>
+          <button type="button" id="createTournamentBtn" class="aoe-btn-primary">
+            Crear Torneo
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+</Layout>
+
+<script define:vars={{ players }}>
+  // State
+  let tournamentSize = 0;
+  let bracketType = 'single';
+  let selectedPlayers = [];
+  let shuffledPlayers = [];
+  let currentRotation = 0;
+  let isSpinning = false;
+
+  // Elements
+  const step1 = document.getElementById('step1');
+  const step2 = document.getElementById('step2');
+  const step3 = document.getElementById('step3');
+  const sizeButtons = document.querySelectorAll('.size-btn');
+  const typeButtons = document.querySelectorAll('.type-btn');
+  const typeDescriptions = document.querySelectorAll('.type-description');
+  const bracketResetOption = document.getElementById('bracketResetOption');
+  const bracketResetCheckbox = document.getElementById('bracketReset');
+  const affectsEloCheckbox = document.getElementById('affectsElo');
+  const casualModeNote = document.getElementById('casualModeNote');
+  const confirmConfigBtn = document.getElementById('confirmConfigBtn');
+  const configError = document.getElementById('configError');
+  const backToStep1 = document.getElementById('backToStep1');
+  const backToStep2 = document.getElementById('backToStep2');
+  const checkboxes = document.querySelectorAll('.player-checkbox');
+  const selectedCountEl = document.getElementById('selectedCount');
+  const sortearBtn = document.getElementById('sortearBtn');
+  const wheel = document.getElementById('wheel');
+  const wheelContent = document.getElementById('wheelContent');
+  const spinBtn = document.getElementById('spinBtn');
+  const matchPreview = document.getElementById('matchPreview');
+  const matchList = document.getElementById('matchList');
+  const reshuffleBtn = document.getElementById('reshuffleBtn');
+  const createTournamentBtn = document.getElementById('createTournamentBtn');
+  const tournamentNameInput = document.getElementById('tournamentName');
+
+  // Colors for wheel segments
+  const segmentColors = [
+    '#8B4513', '#A0522D', '#CD853F', '#D2691E',
+    '#B8860B', '#DAA520', '#8B6914', '#996515',
+    '#704214', '#6B4423', '#8B7355', '#A67B5B',
+    '#C19A6B', '#D2B48C', '#9C661F', '#8B5A2B'
+  ];
+
+  // Validate configuration and update confirm button
+  function validateConfig() {
+    const name = tournamentNameInput.value.trim();
+    const isValid = name.length > 0 && tournamentSize > 0;
+    confirmConfigBtn.disabled = !isValid;
+
+    if (isValid) {
+      configError.classList.add('hidden');
+    }
+  }
+
+  // Size selection
+  sizeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const size = parseInt(btn.dataset.size);
+      tournamentSize = size;
+
+      // Update button styles
+      sizeButtons.forEach(b => b.classList.remove('aoe-btn-primary'));
+      btn.classList.add('aoe-btn-primary');
+
+      validateConfig();
+    });
+  });
+
+  // Tournament name input
+  tournamentNameInput.addEventListener('input', validateConfig);
+
+  // Bracket type selection
+  typeButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      bracketType = btn.dataset.type;
+
+      // Update button styles
+      typeButtons.forEach(b => b.classList.remove('aoe-btn-primary'));
+      btn.classList.add('aoe-btn-primary');
+
+      // Update descriptions
+      typeDescriptions.forEach(desc => {
+        if (desc.dataset.for === bracketType) {
+          desc.classList.remove('hidden');
+        } else {
+          desc.classList.add('hidden');
+        }
+      });
+
+      // Show/hide bracket reset option
+      if (bracketType === 'double') {
+        bracketResetOption.classList.remove('hidden');
+      } else {
+        bracketResetOption.classList.add('hidden');
+      }
+    });
+  });
+
+  // Affects ELO checkbox toggle
+  affectsEloCheckbox.addEventListener('change', () => {
+    if (affectsEloCheckbox.checked) {
+      casualModeNote.classList.add('hidden');
+    } else {
+      casualModeNote.classList.remove('hidden');
+    }
+  });
+
+  // Confirm configuration and go to step 2
+  confirmConfigBtn.addEventListener('click', () => {
+    const name = tournamentNameInput.value.trim();
+
+    if (!name) {
+      configError.textContent = 'Ingresa un nombre para el torneo';
+      configError.classList.remove('hidden');
+      tournamentNameInput.focus();
+      return;
+    }
+
+    if (!tournamentSize) {
+      configError.textContent = 'Selecciona la cantidad de jugadores';
+      configError.classList.remove('hidden');
+      return;
+    }
+
+    configError.classList.add('hidden');
+    step2.classList.remove('hidden');
+    step2.scrollIntoView({ behavior: 'smooth' });
+
+    // Reset player selections
+    checkboxes.forEach(cb => cb.checked = false);
+    updateSelectedCount();
+  });
+
+  // Back to step 1
+  backToStep1.addEventListener('click', () => {
+    step2.classList.add('hidden');
+    step1.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // Back to step 2
+  backToStep2.addEventListener('click', () => {
+    step3.classList.add('hidden');
+    matchPreview.classList.add('hidden');
+    step2.scrollIntoView({ behavior: 'smooth' });
+  });
+
+  // Player selection
+  checkboxes.forEach(cb => {
+    cb.addEventListener('change', updateSelectedCount);
+  });
+
+  function updateSelectedCount() {
+    selectedPlayers = Array.from(checkboxes)
+      .filter(cb => cb.checked)
+      .map(cb => ({
+        id: parseInt(cb.value),
+        name: cb.dataset.name
+      }));
+
+    selectedCountEl.textContent = `(${selectedPlayers.length}/${tournamentSize})`;
+
+    // Enable/disable button
+    sortearBtn.disabled = selectedPlayers.length !== tournamentSize;
+
+    // Highlight overflow
+    if (selectedPlayers.length > tournamentSize) {
+      selectedCountEl.classList.add('text-red-400');
+    } else if (selectedPlayers.length === tournamentSize) {
+      selectedCountEl.classList.remove('text-red-400');
+      selectedCountEl.classList.add('text-green-400');
+    } else {
+      selectedCountEl.classList.remove('text-red-400', 'text-green-400');
+    }
+  }
+
+  // Go to sorteo
+  sortearBtn.addEventListener('click', () => {
+    if (selectedPlayers.length !== tournamentSize) return;
+
+    step3.classList.remove('hidden');
+    step3.scrollIntoView({ behavior: 'smooth' });
+
+    updateWheel();
+  });
+
+  function updateWheel() {
+    const count = selectedPlayers.length;
+    if (count < 2) return;
+
+    const anglePerSegment = 360 / count;
+
+    // Create conic gradient
+    let gradientStops = [];
+    selectedPlayers.forEach((p, i) => {
+      const color = segmentColors[i % segmentColors.length];
+      const start = (i * anglePerSegment);
+      const end = ((i + 1) * anglePerSegment);
+      gradientStops.push(`${color} ${start}deg ${end}deg`);
+    });
+
+    wheel.style.background = `conic-gradient(from 0deg, ${gradientStops.join(', ')})`;
+
+    // Create labels
+    let labelsHtml = '';
+    selectedPlayers.forEach((p, i) => {
+      const angle = (i * anglePerSegment) + (anglePerSegment / 2) - 90;
+      const name = p.name.length > 8 ? p.name.substring(0, 7) + '.' : p.name;
+      labelsHtml += `
+        <div class="absolute text-amber-100 font-cinzel text-xs font-bold whitespace-nowrap"
+             style="top: 50%; left: 50%; transform: rotate(${angle}deg) translateX(50px); transform-origin: 0 0; text-shadow: 1px 1px 2px rgba(0,0,0,0.8);">
+          ${name}
+        </div>
+      `;
+    });
+    wheelContent.innerHTML = labelsHtml;
+  }
+
+  // Spin wheel
+  spinBtn.addEventListener('click', spin);
+
+  function spin() {
+    if (isSpinning) return;
+
+    isSpinning = true;
+    spinBtn.disabled = true;
+    matchPreview.classList.add('hidden');
+
+    // Spin animation
+    const extraRotation = 1800 + Math.random() * 1800;
+    currentRotation += extraRotation;
+    wheel.style.transform = `rotate(${currentRotation}deg)`;
+
+    // After animation, show results
+    setTimeout(() => {
+      // Shuffle players
+      shuffledPlayers = [...selectedPlayers].sort(() => Math.random() - 0.5);
+
+      // Generate match preview
+      let html = '';
+      for (let i = 0; i < shuffledPlayers.length; i += 2) {
+        const p1 = shuffledPlayers[i];
+        const p2 = shuffledPlayers[i + 1];
+        html += `
+          <div class="flex items-center justify-center gap-3 p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30">
+            <span class="text-green-400 font-cinzel flex-1 text-right">${p1.name}</span>
+            <span class="text-aoe-gold text-sm px-2">vs</span>
+            <span class="text-red-400 font-cinzel flex-1 text-left">${p2.name}</span>
+          </div>
+        `;
+      }
+      matchList.innerHTML = html;
+      matchPreview.classList.remove('hidden');
+
+      isSpinning = false;
+      spinBtn.disabled = false;
+    }, 5000);
+  }
+
+  // Reshuffle
+  reshuffleBtn.addEventListener('click', () => {
+    matchPreview.classList.add('hidden');
+    spin();
+  });
+
+  // Create tournament
+  createTournamentBtn.addEventListener('click', async () => {
+    const name = tournamentNameInput.value.trim();
+
+    if (!name) {
+      alert('Por favor ingresa un nombre para el torneo');
+      tournamentNameInput.focus();
+      return;
+    }
+
+    createTournamentBtn.disabled = true;
+    createTournamentBtn.textContent = 'Creando...';
+
+    try {
+      const response = await fetch('/api/tournaments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name,
+          size: tournamentSize,
+          playerIds: shuffledPlayers.map(p => p.id),
+          bracketType,
+          bracketReset: bracketType === 'double' ? bracketResetCheckbox.checked : true,
+          affectsElo: affectsEloCheckbox.checked
+        })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        window.location.href = `/torneos/${data.tournament.id}`;
+      } else {
+        alert(data.error || 'Error al crear el torneo');
+        createTournamentBtn.disabled = false;
+        createTournamentBtn.textContent = 'Crear Torneo';
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      alert('Error de conexion');
+      createTournamentBtn.disabled = false;
+      createTournamentBtn.textContent = 'Crear Torneo';
+    }
+  });
+</script>
+
+<style>
+  #wheel {
+    box-shadow: inset 0 0 20px rgba(0,0,0,0.5), 0 0 30px rgba(139,69,19,0.4);
+  }
+</style>

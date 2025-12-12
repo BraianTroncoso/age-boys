@@ -1,0 +1,690 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { getTotalRounds, getLosersRounds, getBracketSize, getRoundName, getLosersRoundName, getTournamentProgress, isTournamentComplete } from '../../lib/tournaments';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const { id } = Astro.params;
+const tournamentId = parseInt(id || '0');
+
+const tournament = await db.tournaments.findById(tournamentId);
+if (!tournament) {
+  return Astro.redirect('/torneos');
+}
+
+const matches = await db.tournamentMatches.findByTournamentId(tournamentId);
+// Use bracket size (next power of 2) for calculating rounds
+const bracketSize = getBracketSize(tournament.size);
+const totalRounds = getTotalRounds(bracketSize);
+const totalLosersRounds = getLosersRounds(bracketSize);
+const progress = getTournamentProgress(matches);
+const isComplete = isTournamentComplete(matches, tournament.bracketType);
+
+// Get all players involved
+const playerIds = new Set<number>();
+matches.forEach(m => {
+  if (m.player1Id) playerIds.add(m.player1Id);
+  if (m.player2Id) playerIds.add(m.player2Id);
+});
+
+const playersMap: Record<number, { username: string; eloRating: number }> = {};
+for (const playerId of playerIds) {
+  const player = await db.users.findById(playerId);
+  if (player) {
+    playersMap[playerId] = { username: player.username, eloRating: player.eloRating };
+  }
+}
+
+// Get winner info
+let winnerName = '';
+if (tournament.winnerId) {
+  const winner = await db.users.findById(tournament.winnerId);
+  winnerName = winner?.username || '';
+}
+
+// Organize matches by bracket and round
+const winnersMatches = matches.filter(m => m.bracket === 'winners');
+const losersMatches = matches.filter(m => m.bracket === 'losers');
+const grandFinalMatch = matches.find(m => m.bracket === 'grand_final');
+const finalResetMatch = matches.find(m => m.bracket === 'final_reset');
+
+// Organize winners matches by round
+const winnersByRound: Record<number, typeof matches> = {};
+for (let r = totalRounds; r >= 1; r--) {
+  winnersByRound[r] = winnersMatches.filter(m => m.round === r).sort((a, b) => a.position - b.position);
+}
+
+// Organize losers matches by round
+const losersByRound: Record<number, typeof matches> = {};
+for (let r = totalLosersRounds; r >= 1; r--) {
+  losersByRound[r] = losersMatches.filter(m => m.round === r).sort((a, b) => a.position - b.position);
+}
+
+// For single elimination, use winnersMatches as matchesByRound
+const matchesByRound: Record<number, typeof matches> = winnersByRound;
+---
+
+<Layout title={tournament.name}>
+  <div class="space-y-6">
+    <!-- Header -->
+    <div class="aoe-panel">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 class="aoe-title text-2xl sm:text-3xl">{tournament.name}</h1>
+          <p class="text-aoe-cream-dark mt-1">
+            {tournament.size} jugadores •
+            {tournament.bracketType === 'double' ? 'Doble Eliminacion' : 'Eliminacion Directa'} •
+            {isComplete ? 'Finalizado' : 'En curso'}
+            {!tournament.affectsElo && (
+              <span class="ml-2 text-amber-400">(Diversion - Sin ELO)</span>
+            )}
+          </p>
+        </div>
+
+        {!isComplete && (
+          <div class="flex items-center gap-4">
+            <div class="text-right">
+              <div class="text-sm text-aoe-cream-dark">Progreso</div>
+              <div class="text-2xl font-cinzel text-aoe-gold">{progress}%</div>
+            </div>
+            <div class="w-24 h-3 bg-aoe-dark rounded-full overflow-hidden">
+              <div
+                class="h-full bg-gradient-to-r from-aoe-gold-dark to-aoe-gold"
+                style={`width: ${progress}%`}
+              />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+
+    <!-- Winner Banner -->
+    {isComplete && (
+      <div class="aoe-panel bg-gradient-to-r from-amber-900/50 via-yellow-700/30 to-amber-900/50 border-2 border-aoe-gold text-center py-8 champion-glow">
+        <div class="text-6xl mb-4 trophy-animation">🏆</div>
+        <h2 class="font-cinzel text-3xl text-aoe-gold mb-2">CAMPEON</h2>
+        <p class="font-cinzel text-2xl text-aoe-cream">{winnerName}</p>
+      </div>
+    )}
+
+    <!-- Single Elimination Bracket -->
+    {tournament.bracketType === 'single' && (
+      <div class="aoe-panel overflow-x-auto">
+        <div class="tournament-bracket" id="bracket">
+          {Array.from({ length: totalRounds }, (_, i) => totalRounds - i).map(round => (
+            <div class="bracket-round" data-round={round}>
+              <h3 class="font-cinzel text-sm text-aoe-gold mb-4 text-center whitespace-nowrap">
+                {getRoundName(round, totalRounds)}
+              </h3>
+
+              <div class="bracket-matches">
+                {matchesByRound[round]?.map((match) => {
+                  const player1 = match.player1Id ? playersMap[match.player1Id] : null;
+                  const player2 = match.player2Id ? playersMap[match.player2Id] : null;
+                  const isReady = player1 && player2 && !match.winnerId;
+                  const isPlayed = match.winnerId !== null;
+
+                  return (
+                    <div
+                      class={`bracket-match ${isReady ? 'match-ready' : ''} ${isPlayed ? 'match-played' : ''}`}
+                      data-match-id={match.id}
+                      data-round={round}
+                    >
+                      <div
+                        class={`bracket-player ${match.winnerId === match.player1Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player1Id ? 'loser' : ''}`}
+                      >
+                        {player1 ? (
+                          <>
+                            <span class="player-name">{player1.username}</span>
+                            <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player1.eloRating)}</span>
+                          </>
+                        ) : (
+                          <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                        )}
+                        {match.winnerId === match.player1Id && <span class="winner-crown">👑</span>}
+                      </div>
+
+                      <div class="vs-divider">vs</div>
+
+                      <div
+                        class={`bracket-player ${match.winnerId === match.player2Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player2Id ? 'loser' : ''}`}
+                      >
+                        {player2 ? (
+                          <>
+                            <span class="player-name">{player2.username}</span>
+                            <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player2.eloRating)}</span>
+                          </>
+                        ) : (
+                          <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                        )}
+                        {match.winnerId === match.player2Id && <span class="winner-crown">👑</span>}
+                      </div>
+
+                      {isReady && (
+                        <div class="match-actions">
+                          <button type="button" class="select-winner-btn" data-winner-id={match.player1Id} data-match-id={match.id}>
+                            {player1?.username} Gana
+                          </button>
+                          <button type="button" class="select-winner-btn" data-winner-id={match.player2Id} data-match-id={match.id}>
+                            {player2?.username} Gana
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+
+          <div class="bracket-trophy">
+            <div class={`trophy-container ${isComplete ? 'trophy-won' : ''}`}>
+              <span class="text-5xl">🏆</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <!-- Double Elimination Bracket -->
+    {tournament.bracketType === 'double' && (
+      <div class="space-y-6">
+        <!-- Winners Bracket -->
+        <div class="aoe-panel overflow-x-auto">
+          <h2 class="font-cinzel text-xl text-aoe-gold mb-4 flex items-center gap-2">
+            <span>🏆</span> Winners Bracket
+          </h2>
+          <div class="tournament-bracket winners-bracket-view" id="winners-bracket">
+            {Array.from({ length: totalRounds }, (_, i) => totalRounds - i).map(round => (
+              <div class="bracket-round" data-round={round} data-bracket="winners">
+                <h3 class="font-cinzel text-sm text-aoe-gold mb-4 text-center whitespace-nowrap">
+                  {round === 1 ? 'Winners Final' : getRoundName(round, totalRounds)}
+                </h3>
+
+                <div class="bracket-matches">
+                  {winnersByRound[round]?.map((match) => {
+                    const player1 = match.player1Id ? playersMap[match.player1Id] : null;
+                    const player2 = match.player2Id ? playersMap[match.player2Id] : null;
+                    const isReady = player1 && player2 && !match.winnerId;
+                    const isPlayed = match.winnerId !== null;
+
+                    return (
+                      <div
+                        class={`bracket-match ${isReady ? 'match-ready' : ''} ${isPlayed ? 'match-played' : ''}`}
+                        data-match-id={match.id}
+                      >
+                        <div class={`bracket-player ${match.winnerId === match.player1Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player1Id ? 'loser' : ''}`}>
+                          {player1 ? (
+                            <>
+                              <span class="player-name">{player1.username}</span>
+                              <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player1.eloRating)}</span>
+                            </>
+                          ) : (
+                            <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                          )}
+                          {match.winnerId === match.player1Id && <span class="winner-crown">👑</span>}
+                        </div>
+
+                        <div class="vs-divider">vs</div>
+
+                        <div class={`bracket-player ${match.winnerId === match.player2Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player2Id ? 'loser' : ''}`}>
+                          {player2 ? (
+                            <>
+                              <span class="player-name">{player2.username}</span>
+                              <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player2.eloRating)}</span>
+                            </>
+                          ) : (
+                            <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                          )}
+                          {match.winnerId === match.player2Id && <span class="winner-crown">👑</span>}
+                        </div>
+
+                        {isReady && (
+                          <div class="match-actions">
+                            <button type="button" class="select-winner-btn" data-winner-id={match.player1Id} data-match-id={match.id}>
+                              {player1?.username} Gana
+                            </button>
+                            <button type="button" class="select-winner-btn" data-winner-id={match.player2Id} data-match-id={match.id}>
+                              {player2?.username} Gana
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- Losers Bracket -->
+        <div class="aoe-panel overflow-x-auto losers-bracket-panel">
+          <h2 class="font-cinzel text-xl text-red-400 mb-4 flex items-center gap-2">
+            <span>💀</span> Losers Bracket
+          </h2>
+          <div class="tournament-bracket losers-bracket-view" id="losers-bracket">
+            {Array.from({ length: totalLosersRounds }, (_, i) => totalLosersRounds - i).map(round => (
+              <div class="bracket-round losers-round" data-round={round} data-bracket="losers">
+                <h3 class="font-cinzel text-sm text-red-400 mb-4 text-center whitespace-nowrap">
+                  {getLosersRoundName(round, totalLosersRounds)}
+                </h3>
+
+                <div class="bracket-matches">
+                  {losersByRound[round]?.map((match) => {
+                    const player1 = match.player1Id ? playersMap[match.player1Id] : null;
+                    const player2 = match.player2Id ? playersMap[match.player2Id] : null;
+                    const isReady = player1 && player2 && !match.winnerId;
+                    const isPlayed = match.winnerId !== null;
+
+                    return (
+                      <div
+                        class={`bracket-match losers-match ${isReady ? 'match-ready losers-ready' : ''} ${isPlayed ? 'match-played' : ''}`}
+                        data-match-id={match.id}
+                      >
+                        <div class={`bracket-player ${match.winnerId === match.player1Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player1Id ? 'loser' : ''}`}>
+                          {player1 ? (
+                            <>
+                              <span class="player-name">{player1.username}</span>
+                              <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player1.eloRating)}</span>
+                            </>
+                          ) : (
+                            <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                          )}
+                          {match.winnerId === match.player1Id && <span class="winner-crown">👑</span>}
+                        </div>
+
+                        <div class="vs-divider">vs</div>
+
+                        <div class={`bracket-player ${match.winnerId === match.player2Id ? 'winner' : ''} ${match.winnerId && match.winnerId !== match.player2Id ? 'loser' : ''}`}>
+                          {player2 ? (
+                            <>
+                              <span class="player-name">{player2.username}</span>
+                              <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player2.eloRating)}</span>
+                            </>
+                          ) : (
+                            <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                          )}
+                          {match.winnerId === match.player2Id && <span class="winner-crown">👑</span>}
+                        </div>
+
+                        {isReady && (
+                          <div class="match-actions">
+                            <button type="button" class="select-winner-btn" data-winner-id={match.player1Id} data-match-id={match.id}>
+                              {player1?.username} Gana
+                            </button>
+                            <button type="button" class="select-winner-btn" data-winner-id={match.player2Id} data-match-id={match.id}>
+                              {player2?.username} Gana
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <!-- Grand Final -->
+        {grandFinalMatch && (
+          <div class="aoe-panel grand-final-panel">
+            <h2 class="font-cinzel text-xl text-aoe-gold mb-4 flex items-center justify-center gap-2">
+              <span>👑</span> Gran Final
+            </h2>
+            {(() => {
+              const player1 = grandFinalMatch.player1Id ? playersMap[grandFinalMatch.player1Id] : null;
+              const player2 = grandFinalMatch.player2Id ? playersMap[grandFinalMatch.player2Id] : null;
+              const isReady = player1 && player2 && !grandFinalMatch.winnerId;
+              const isPlayed = grandFinalMatch.winnerId !== null;
+
+              return (
+                <div class={`bracket-match grand-final-match mx-auto max-w-md ${isReady ? 'match-ready' : ''} ${isPlayed ? 'match-played' : ''}`} data-match-id={grandFinalMatch.id}>
+                  <div class="text-center text-xs text-aoe-cream-dark mb-2">Campeon Winners</div>
+                  <div class={`bracket-player ${grandFinalMatch.winnerId === grandFinalMatch.player1Id ? 'winner' : ''} ${grandFinalMatch.winnerId && grandFinalMatch.winnerId !== grandFinalMatch.player1Id ? 'loser' : ''}`}>
+                    {player1 ? (
+                      <>
+                        <span class="player-name">{player1.username}</span>
+                        <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player1.eloRating)}</span>
+                      </>
+                    ) : (
+                      <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                    )}
+                    {grandFinalMatch.winnerId === grandFinalMatch.player1Id && <span class="winner-crown">👑</span>}
+                  </div>
+
+                  <div class="vs-divider text-lg">VS</div>
+
+                  <div class="text-center text-xs text-red-400 mb-2">Campeon Losers</div>
+                  <div class={`bracket-player ${grandFinalMatch.winnerId === grandFinalMatch.player2Id ? 'winner' : ''} ${grandFinalMatch.winnerId && grandFinalMatch.winnerId !== grandFinalMatch.player2Id ? 'loser' : ''}`}>
+                    {player2 ? (
+                      <>
+                        <span class="player-name">{player2.username}</span>
+                        <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player2.eloRating)}</span>
+                      </>
+                    ) : (
+                      <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                    )}
+                    {grandFinalMatch.winnerId === grandFinalMatch.player2Id && <span class="winner-crown">👑</span>}
+                  </div>
+
+                  {isReady && (
+                    <div class="match-actions">
+                      <button type="button" class="select-winner-btn" data-winner-id={grandFinalMatch.player1Id} data-match-id={grandFinalMatch.id}>
+                        {player1?.username} Gana
+                      </button>
+                      <button type="button" class="select-winner-btn" data-winner-id={grandFinalMatch.player2Id} data-match-id={grandFinalMatch.id}>
+                        {player2?.username} Gana
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        <!-- Final Reset (solo si bracket reset esta habilitado y el losers campeon gano la gran final) -->
+        {finalResetMatch && finalResetMatch.player1Id && (
+          <div class="aoe-panel final-reset-panel">
+            <h2 class="font-cinzel text-xl text-amber-500 mb-4 flex items-center justify-center gap-2">
+              <span>⚔️</span> Final Reset
+            </h2>
+            <p class="text-center text-sm text-aoe-cream-dark mb-4">
+              El campeon de Losers gano la Gran Final. Se juega una ultima partida decisiva.
+            </p>
+            {(() => {
+              const player1 = finalResetMatch.player1Id ? playersMap[finalResetMatch.player1Id] : null;
+              const player2 = finalResetMatch.player2Id ? playersMap[finalResetMatch.player2Id] : null;
+              const isReady = player1 && player2 && !finalResetMatch.winnerId;
+              const isPlayed = finalResetMatch.winnerId !== null;
+
+              return (
+                <div class={`bracket-match final-reset-match mx-auto max-w-md ${isReady ? 'match-ready' : ''} ${isPlayed ? 'match-played' : ''}`} data-match-id={finalResetMatch.id}>
+                  <div class={`bracket-player ${finalResetMatch.winnerId === finalResetMatch.player1Id ? 'winner' : ''} ${finalResetMatch.winnerId && finalResetMatch.winnerId !== finalResetMatch.player1Id ? 'loser' : ''}`}>
+                    {player1 ? (
+                      <>
+                        <span class="player-name">{player1.username}</span>
+                        <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player1.eloRating)}</span>
+                      </>
+                    ) : (
+                      <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                    )}
+                    {finalResetMatch.winnerId === finalResetMatch.player1Id && <span class="winner-crown">👑</span>}
+                  </div>
+
+                  <div class="vs-divider text-lg">VS</div>
+
+                  <div class={`bracket-player ${finalResetMatch.winnerId === finalResetMatch.player2Id ? 'winner' : ''} ${finalResetMatch.winnerId && finalResetMatch.winnerId !== finalResetMatch.player2Id ? 'loser' : ''}`}>
+                    {player2 ? (
+                      <>
+                        <span class="player-name">{player2.username}</span>
+                        <span class="player-elo text-xs text-aoe-cream-dark">{Math.round(player2.eloRating)}</span>
+                      </>
+                    ) : (
+                      <span class="text-aoe-cream-dark/50 italic">Por definir</span>
+                    )}
+                    {finalResetMatch.winnerId === finalResetMatch.player2Id && <span class="winner-crown">👑</span>}
+                  </div>
+
+                  {isReady && (
+                    <div class="match-actions">
+                      <button type="button" class="select-winner-btn" data-winner-id={finalResetMatch.player1Id} data-match-id={finalResetMatch.id}>
+                        {player1?.username} Gana
+                      </button>
+                      <button type="button" class="select-winner-btn" data-winner-id={finalResetMatch.player2Id} data-match-id={finalResetMatch.id}>
+                        {player2?.username} Gana
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+        )}
+      </div>
+    )}
+
+    <!-- Back link -->
+    <div class="text-center">
+      <a href="/torneos" class="text-aoe-gold hover:underline">← Volver a Torneos</a>
+    </div>
+  </div>
+</Layout>
+
+<script define:vars={{ tournamentId }}>
+  document.querySelectorAll('.select-winner-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const winnerId = parseInt(btn.dataset.winnerId);
+      const matchId = parseInt(btn.dataset.matchId);
+
+      if (!confirm('¿Confirmar ganador?')) return;
+
+      btn.disabled = true;
+      btn.textContent = 'Guardando...';
+
+      try {
+        const response = await fetch(`/api/tournaments/${tournamentId}/match`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            tournamentMatchId: matchId,
+            winnerId: winnerId
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.success) {
+          // Reload page to update bracket
+          window.location.reload();
+        } else {
+          alert(data.error || 'Error al registrar resultado');
+          btn.disabled = false;
+          btn.textContent = btn.textContent.replace('Guardando...', ' Gana');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        alert('Error de conexion');
+        btn.disabled = false;
+      }
+    });
+  });
+</script>
+
+<style>
+  .tournament-bracket {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    min-width: max-content;
+    padding: 1rem 0;
+  }
+
+  .bracket-round {
+    display: flex;
+    flex-direction: column;
+    min-width: 180px;
+  }
+
+  .bracket-matches {
+    display: flex;
+    flex-direction: column;
+    justify-content: space-around;
+    flex: 1;
+    gap: 1rem;
+  }
+
+  .bracket-match {
+    background: linear-gradient(135deg, rgba(45, 31, 15, 0.9), rgba(26, 18, 9, 0.9));
+    border: 2px solid rgba(201, 162, 39, 0.3);
+    border-radius: 8px;
+    padding: 0.75rem;
+    position: relative;
+  }
+
+  .bracket-match.match-ready {
+    border-color: rgba(201, 162, 39, 0.8);
+    box-shadow: 0 0 15px rgba(201, 162, 39, 0.3);
+  }
+
+  .bracket-match.match-played {
+    border-color: rgba(34, 197, 94, 0.5);
+  }
+
+  /* Connector lines */
+  .bracket-match::after {
+    content: '';
+    position: absolute;
+    right: -1rem;
+    top: 50%;
+    width: 1rem;
+    height: 2px;
+    background: linear-gradient(to right, rgba(201, 162, 39, 0.5), rgba(201, 162, 39, 0.2));
+  }
+
+  [data-round="1"] .bracket-match::after {
+    display: none;
+  }
+
+  .bracket-player {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .bracket-player.winner {
+    background: rgba(34, 197, 94, 0.2);
+    border: 1px solid rgba(34, 197, 94, 0.5);
+  }
+
+  .bracket-player.loser {
+    opacity: 0.5;
+  }
+
+  .player-name {
+    font-family: 'Cinzel', serif;
+    color: #f5e6c8;
+  }
+
+  .winner-crown {
+    margin-left: 0.5rem;
+  }
+
+  .vs-divider {
+    text-align: center;
+    color: rgba(201, 162, 39, 0.6);
+    font-size: 0.75rem;
+    padding: 0.25rem 0;
+  }
+
+  .match-actions {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid rgba(201, 162, 39, 0.2);
+  }
+
+  .select-winner-btn {
+    flex: 1;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    font-family: 'Cinzel', serif;
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.3), rgba(139, 69, 19, 0.3));
+    border: 1px solid rgba(201, 162, 39, 0.5);
+    border-radius: 4px;
+    color: #f5e6c8;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .select-winner-btn:hover {
+    background: linear-gradient(135deg, rgba(201, 162, 39, 0.5), rgba(139, 69, 19, 0.5));
+    box-shadow: 0 0 10px rgba(201, 162, 39, 0.3);
+  }
+
+  .select-winner-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+
+  .bracket-trophy {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 80px;
+  }
+
+  .trophy-container {
+    opacity: 0.3;
+    transition: all 0.5s;
+  }
+
+  .trophy-container.trophy-won {
+    opacity: 1;
+    animation: trophy-glow 2s ease-in-out infinite;
+  }
+
+  @keyframes trophy-glow {
+    0%, 100% {
+      filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
+      transform: scale(1);
+    }
+    50% {
+      filter: drop-shadow(0 0 20px rgba(255, 215, 0, 0.8));
+      transform: scale(1.1);
+    }
+  }
+
+  .champion-glow {
+    animation: champion-pulse 3s ease-in-out infinite;
+  }
+
+  @keyframes champion-pulse {
+    0%, 100% {
+      box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+    }
+    50% {
+      box-shadow: 0 0 40px rgba(255, 215, 0, 0.6);
+    }
+  }
+
+  .trophy-animation {
+    animation: trophy-bounce 1s ease-in-out;
+  }
+
+  @keyframes trophy-bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-10px); }
+  }
+
+  /* Responsive */
+  @media (max-width: 640px) {
+    .tournament-bracket {
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .bracket-round {
+      min-width: 100%;
+    }
+
+    .bracket-match::after {
+      display: none;
+    }
+
+    .bracket-trophy {
+      order: -1;
+      padding: 1rem 0;
+    }
+  }
+</style>

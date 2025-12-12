@@ -1,0 +1,145 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { db } from '../../db';
+import { getTournamentProgress, getTotalRounds, getRoundName } from '../../lib/tournaments';
+
+const user = Astro.locals.user;
+if (!user) {
+  return Astro.redirect('/login');
+}
+
+const activeTournaments = await db.tournaments.findActive();
+const completedTournaments = await db.tournaments.findCompleted();
+
+// Get matches and winner data for each tournament
+const tournamentsWithData = await Promise.all([
+  ...activeTournaments.map(async (t) => {
+    const matches = await db.tournamentMatches.findByTournamentId(t.id);
+    const progress = getTournamentProgress(matches);
+    const totalRounds = getTotalRounds(t.size);
+    const playedMatches = matches.filter(m => m.winnerId !== null).length;
+    const currentRoundNum = matches.find(m => m.winnerId === null && m.player1Id && m.player2Id)?.round || 1;
+    return {
+      ...t,
+      progress,
+      totalMatches: matches.length,
+      playedMatches,
+      currentRound: getRoundName(currentRoundNum, totalRounds),
+      isActive: true
+    };
+  }),
+  ...completedTournaments.map(async (t) => {
+    const winner = t.winnerId ? await db.users.findById(t.winnerId) : null;
+    return {
+      ...t,
+      winnerName: winner?.username || 'Desconocido',
+      isActive: false
+    };
+  })
+]);
+
+const active = tournamentsWithData.filter(t => t.isActive);
+const completed = tournamentsWithData.filter(t => !t.isActive);
+---
+
+<Layout title="Torneos">
+  <div class="space-y-6 sm:space-y-8">
+    <!-- Header -->
+    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div>
+        <h1 class="aoe-title text-2xl sm:text-3xl">Torneos</h1>
+        <p class="text-aoe-cream-dark mt-1">Competencias de eliminacion directa</p>
+      </div>
+      <a href="/torneos/nuevo" class="aoe-btn-primary text-center">
+        + Nuevo Torneo
+      </a>
+    </div>
+
+    <!-- Torneos Activos -->
+    <section class="aoe-panel">
+      <h2 class="font-cinzel text-xl text-aoe-gold mb-4 flex items-center gap-2">
+        <span class="text-2xl">⚔️</span>
+        Torneos Activos
+      </h2>
+
+      {active.length === 0 ? (
+        <p class="text-aoe-cream-dark text-center py-8">
+          No hay torneos activos. <a href="/torneos/nuevo" class="text-aoe-gold hover:underline">Crear uno</a>
+        </p>
+      ) : (
+        <div class="grid gap-4">
+          {active.map((t) => (
+            <a href={`/torneos/${t.id}`} class="block aoe-card hover:shadow-gold-lg transition-all group">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div class="flex-1">
+                  <h3 class="font-cinzel text-lg text-aoe-cream group-hover:text-aoe-gold transition-colors">
+                    {t.name}
+                  </h3>
+                  <div class="flex flex-wrap gap-3 mt-2 text-sm text-aoe-cream-dark">
+                    <span>{t.size} jugadores</span>
+                    <span>•</span>
+                    <span>{t.currentRound}</span>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-4">
+                  <!-- Progress bar -->
+                  <div class="w-32">
+                    <div class="flex justify-between text-xs text-aoe-cream-dark mb-1">
+                      <span>Progreso</span>
+                      <span>{t.progress}%</span>
+                    </div>
+                    <div class="h-2 bg-aoe-dark rounded-full overflow-hidden">
+                      <div
+                        class="h-full bg-gradient-to-r from-aoe-gold-dark to-aoe-gold transition-all"
+                        style={`width: ${t.progress}%`}
+                      />
+                    </div>
+                  </div>
+
+                  <span class="text-aoe-gold text-xl">→</span>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+
+    <!-- Historial -->
+    <section class="aoe-panel">
+      <h2 class="font-cinzel text-xl text-aoe-gold mb-4 flex items-center gap-2">
+        <span class="text-2xl">🏆</span>
+        Historial de Torneos
+      </h2>
+
+      {completed.length === 0 ? (
+        <p class="text-aoe-cream-dark text-center py-8">
+          Aun no hay torneos completados
+        </p>
+      ) : (
+        <div class="grid gap-3">
+          {completed.map((t) => (
+            <a href={`/torneos/${t.id}`} class="block aoe-card hover:shadow-gold transition-all group">
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h3 class="font-cinzel text-aoe-cream group-hover:text-aoe-gold transition-colors">
+                    {t.name}
+                  </h3>
+                  <p class="text-sm text-aoe-cream-dark">
+                    {t.size} jugadores • {new Date(t.completedAt || '').toLocaleDateString('es-AR')}
+                  </p>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <span class="text-2xl">🏆</span>
+                  <span class="font-cinzel text-aoe-gold">{t.winnerName}</span>
+                </div>
+              </div>
+            </a>
+          ))}
+        </div>
+      )}
+    </section>
+  </div>
+</Layout>

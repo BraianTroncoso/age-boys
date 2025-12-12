@@ -308,3 +308,138 @@ body {
     @apply py-3 text-base min-h-[44px];
   }
 }
+
+/* ==================== */
+/* TOURNAMENT STYLES    */
+/* ==================== */
+
+/* Trophy animations */
+@keyframes trophyGlow {
+  0%, 100% {
+    filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 25px rgba(255, 215, 0, 0.9));
+    transform: scale(1.05);
+  }
+}
+
+@keyframes championPulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(255, 215, 0, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 50px rgba(255, 215, 0, 0.7);
+  }
+}
+
+.trophy-glow {
+  animation: trophyGlow 2s ease-in-out infinite;
+}
+
+.champion-pulse {
+  animation: championPulse 3s ease-in-out infinite;
+}
+
+/* ==================== */
+/* PLAYER CARD FIX      */
+/* ==================== */
+
+/* Dimensiones fijas para evitar layout shift al seleccionar */
+.player-card {
+  min-height: 80px;
+  height: 80px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+  padding: 0.5rem !important;
+  position: relative;
+}
+
+/* Nombre del jugador centrado */
+.player-card .player-name {
+  width: 100%;
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.5;
+}
+
+/* Check indicator posicionado abajo centro */
+.player-card .check-indicator {
+  position: absolute;
+  bottom: 0.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  visibility: hidden;
+}
+
+/* Al seleccionar solo cambia visibilidad */
+.player-checkbox:checked + .player-card .check-indicator,
+.peer:checked ~ .player-card .check-indicator,
+.random-player-checkbox:checked + .player-card .check-indicator,
+.ffa-player-checkbox:checked + .player-card .check-indicator {
+  visibility: visible !important;
+}
+
+/* ==================== */
+/* DOUBLE ELIMINATION   */
+/* ==================== */
+
+/* Losers Bracket Panel */
+.losers-bracket-panel {
+  background: linear-gradient(180deg, rgba(139, 0, 0, 0.1) 0%, rgba(26, 18, 9, 0.95) 100%);
+  border-color: rgba(220, 38, 38, 0.4);
+}
+
+/* Losers Bracket Matches */
+.losers-match {
+  border-color: rgba(220, 38, 38, 0.3) !important;
+}
+
+.losers-match.match-ready,
+.losers-ready {
+  border-color: rgba(220, 38, 38, 0.7) !important;
+  box-shadow: 0 0 15px rgba(220, 38, 38, 0.3) !important;
+}
+
+/* Grand Final Panel */
+.grand-final-panel {
+  background: linear-gradient(180deg, rgba(201, 162, 39, 0.15) 0%, rgba(26, 18, 9, 0.95) 100%);
+  border-color: var(--aoe-gold);
+}
+
+.grand-final-match {
+  border: 2px solid var(--aoe-gold) !important;
+  box-shadow: 0 0 20px rgba(201, 162, 39, 0.3);
+}
+
+.grand-final-match.match-ready {
+  box-shadow: 0 0 30px rgba(201, 162, 39, 0.5) !important;
+  animation: goldGlow 2s ease-in-out infinite;
+}
+
+/* Final Reset Panel */
+.final-reset-panel {
+  background: linear-gradient(180deg, rgba(245, 158, 11, 0.15) 0%, rgba(26, 18, 9, 0.95) 100%);
+  border-color: rgba(245, 158, 11, 0.6);
+}
+
+.final-reset-match {
+  border: 2px solid rgba(245, 158, 11, 0.6) !important;
+  box-shadow: 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+.final-reset-match.match-ready {
+  box-shadow: 0 0 30px rgba(245, 158, 11, 0.5) !important;
+}
+
+/* Losers bracket view styling */
+.losers-bracket-view .bracket-match::after {
+  background: linear-gradient(to right, rgba(220, 38, 38, 0.5), rgba(220, 38, 38, 0.2)) !important;
+}
