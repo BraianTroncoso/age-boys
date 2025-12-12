@@ -112,6 +112,29 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
         </a>
       </form>
     </div>
+
+    {user.isAdmin === 1 && (
+      <div class="aoe-panel border-red-500/30">
+        <h3 class="aoe-title text-xl mb-4 text-red-400">Panel de Administracion</h3>
+        <p class="text-aoe-cream-dark text-sm mb-4">Eliminar partidas y torneos revierte automaticamente los cambios de ELO.</p>
+
+        <!-- Lista de Torneos -->
+        <div class="mb-6">
+          <h4 class="text-lg font-semibold text-aoe-cream mb-2">Torneos</h4>
+          <div id="adminTournaments" class="space-y-2 max-h-60 overflow-y-auto">
+            <p class="text-aoe-cream-dark text-sm">Cargando...</p>
+          </div>
+        </div>
+
+        <!-- Lista de Partidas Recientes -->
+        <div>
+          <h4 class="text-lg font-semibold text-aoe-cream mb-2">Partidas Recientes</h4>
+          <div id="adminMatches" class="space-y-2 max-h-60 overflow-y-auto">
+            <p class="text-aoe-cream-dark text-sm">Cargando...</p>
+          </div>
+        </div>
+      </div>
+    )}
   </div>
 </Layout>
 
@@ -152,4 +175,123 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
       messageDiv.classList.remove('hidden');
     }
   });
+
+  // Admin panel functionality
+  const adminTournaments = document.getElementById('adminTournaments');
+  const adminMatches = document.getElementById('adminMatches');
+
+  if (adminTournaments && adminMatches) {
+    loadAdminData();
+  }
+
+  async function loadAdminData() {
+    try {
+      const response = await fetch('/api/admin/list');
+      const data = await response.json();
+
+      if (data.error) {
+        adminTournaments!.innerHTML = `<p class="text-red-400 text-sm">${data.error}</p>`;
+        adminMatches!.innerHTML = `<p class="text-red-400 text-sm">${data.error}</p>`;
+        return;
+      }
+
+      // Renderizar torneos
+      if (data.tournaments.length === 0) {
+        adminTournaments!.innerHTML = '<p class="text-aoe-cream-dark text-sm">No hay torneos</p>';
+      } else {
+        adminTournaments!.innerHTML = data.tournaments.map((t: any) => `
+          <div class="flex justify-between items-center bg-aoe-brown-light/30 p-2 rounded">
+            <div>
+              <span class="text-aoe-cream text-sm">${t.name}</span>
+              <span class="text-aoe-cream-dark text-xs ml-2">(${t.size} jugadores, ${t.status})</span>
+              ${!t.affectsElo ? '<span class="text-pink-400 text-xs ml-1">[Sin ELO]</span>' : ''}
+            </div>
+            <button
+              onclick="deleteTournament(${t.id}, '${t.name.replace(/'/g, "\\'")}')"
+              class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+            >
+              Eliminar
+            </button>
+          </div>
+        `).join('');
+      }
+
+      // Renderizar partidas
+      if (data.matches.length === 0) {
+        adminMatches!.innerHTML = '<p class="text-aoe-cream-dark text-sm">No hay partidas</p>';
+      } else {
+        adminMatches!.innerHTML = data.matches.map((m: any) => {
+          const players = m.participants.map((p: any) =>
+            `<span class="${p.isWinner ? 'text-green-400' : 'text-red-400'}">${p.playerName}</span>`
+          ).join(' vs ');
+          const date = new Date(m.playedAt).toLocaleDateString('es');
+          return `
+            <div class="flex justify-between items-center bg-aoe-brown-light/30 p-2 rounded">
+              <div>
+                <span class="text-aoe-cream-dark text-xs">${m.matchType} - ${date}</span>
+                <div class="text-sm">${players}</div>
+              </div>
+              <button
+                onclick="deleteMatch(${m.id})"
+                class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
+              >
+                Eliminar
+              </button>
+            </div>
+          `;
+        }).join('');
+      }
+    } catch (err) {
+      adminTournaments!.innerHTML = '<p class="text-red-400 text-sm">Error al cargar</p>';
+      adminMatches!.innerHTML = '<p class="text-red-400 text-sm">Error al cargar</p>';
+    }
+  }
+
+  (window as any).deleteTournament = async function(id: number, name: string) {
+    if (!confirm(`¿Seguro que queres eliminar el torneo "${name}"? Se revertira el ELO si aplica.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/delete-tournament', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tournamentId: id })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        loadAdminData();
+      } else {
+        alert('Error: ' + result.error);
+      }
+    } catch (err) {
+      alert('Error de conexion');
+    }
+  };
+
+  (window as any).deleteMatch = async function(id: number) {
+    if (!confirm(`¿Seguro que queres eliminar la partida #${id}? Se revertira el ELO.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/delete-match', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matchId: id })
+      });
+      const result = await response.json();
+
+      if (result.success) {
+        alert(result.message);
+        loadAdminData();
+      } else {
+        alert('Error: ' + result.error);
+      }
+    } catch (err) {
+      alert('Error de conexion');
+    }
+  };
 </script>

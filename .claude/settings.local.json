@@ -17,7 +17,8 @@
       "Bash(curl -s \"libsql://age-boys-braiantroncoso.aws-us-east-1.turso.io\" -H \"Authorization: Bearer eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3NjUzMTY3NDEsImlkIjoiYzQxZDJjM2EtZWI3OC00ZDhkLWIwNzEtZjZiYTI4MjY2NTQwIiwicmlkIjoiODkxNTk3YWItNjdmMS00NDkxLTk1ZjItODEwYmU3OWNkMTFlIn0.NrirvlVTesOfJjoOKB3eMHYI8VA16K6UaFN3-K5ppS-Ius2-mHdZfymcSPtNvAKfCuYPoO_4amaRk6dCPmbkCw\" -d '{\"\"statements\"\": [\"\"SELECT m.id, m.matchType, m.playedAt FROM matches m ORDER BY m.playedAt DESC\"\"]}')",
       "Bash(curl:*)",
       "Bash(find:*)",
-      "Bash(npx tsx:*)"
+      "Bash(npx tsx:*)",
+      "Bash(sqlite3:*)"
     ]
   }
 }

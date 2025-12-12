@@ -72,8 +72,8 @@ const getPageNumbers = () => {
         <a href="/matches/new" class="aoe-btn-primary inline-block text-sm sm:text-base">Registrar Primera Partida</a>
       </div>
     ) : (
-      <>
-        <div class="space-y-3 sm:space-y-4">
+      <div class="flex flex-col" style="min-height: calc(100vh - 200px);">
+        <div class="space-y-3 sm:space-y-4 flex-grow">
           {matchesWithParticipants.map((match) => {
             const winners = match.participants.filter(p => p.isWinner);
             const losers = match.participants.filter(p => !p.isWinner);
@@ -131,8 +131,10 @@ const getPageNumbers = () => {
           })}
         </div>
 
-        {totalPages > 1 && (
-          <div class="flex flex-wrap justify-center items-center gap-2 mt-4 sm:mt-8">
+        <!-- Paginacion siempre al fondo -->
+        <div class="mt-auto pt-4 sm:pt-8 pb-[15px]">
+          {totalPages > 1 && (
+            <div class="flex flex-wrap justify-center items-center gap-2">
             {validPage > 1 ? (
               <a
                 href={`/matches?page=${validPage - 1}`}
@@ -179,15 +181,16 @@ const getPageNumbers = () => {
                 →
               </span>
             )}
-          </div>
-        )}
+            </div>
+          )}
 
-        {totalPages > 1 && (
-          <p class="text-center text-aoe-cream-dark text-xs sm:text-sm">
-            Página {validPage} de {totalPages}
-          </p>
-        )}
-      </>
+          {totalPages > 1 && (
+            <p class="text-center text-aoe-cream-dark text-xs sm:text-sm mt-2">
+              Página {validPage} de {totalPages}
+            </p>
+          )}
+        </div>
+      </div>
     )}
   </div>
 </Layout>

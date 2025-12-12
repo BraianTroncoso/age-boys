@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { db } from '../db';
 import { getRatingTier, getTierColor } from '../lib/elo';
 import { getCivilizationName, getCivilizationFlag } from '../lib/civilizations';
-import { getWeeklyLoser } from '../lib/stats';
+import { getWeeklyLoser, getWeeklyPollera } from '../lib/stats';
 
 // Obtener el filtro de ranking de la URL
 const url = new URL(Astro.request.url);
@@ -23,6 +23,9 @@ const matches = allMatchesRaw.slice(0, 5);
 
 // El boludo de la semana
 const weeklyLoser = await getWeeklyLoser();
+
+// El pollera de la semana
+const weeklyPollera = await getWeeklyPollera();
 
 // El rey del ranking
 const topPlayer = players.length > 0 ? players[0] : null;
@@ -185,6 +188,35 @@ for (const match of matches) {
                 <div class="text-xl sm:text-2xl font-cinzel text-green-400">{weeklyLoser.wins}</div>
                 <div class="text-[10px] sm:text-xs text-aoe-cream-dark">Victorias</div>
               </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <!-- El Pollera de la Semana -->
+    {weeklyPollera && weeklyPollera.player.id !== topPlayer?.id && weeklyPollera.player.id !== weeklyLoser?.player.id && (
+      <div class="aoe-panel relative overflow-hidden border-pink-500/30 bg-gradient-to-r from-pink-900/20 via-transparent to-pink-900/20">
+        <div class="relative">
+          <div class="flex flex-col items-center gap-4 sm:gap-6 sm:flex-row sm:justify-between">
+            <div class="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 text-center sm:text-left">
+              <div class="w-16 h-16 sm:w-20 sm:h-20 rounded-full bg-gradient-to-br from-pink-600 via-pink-700 to-purple-900 flex items-center justify-center text-3xl sm:text-4xl shadow-[0_0_20px_rgba(236,72,153,0.4)] border-4 border-pink-500">
+                👠
+              </div>
+              <div>
+                <h3 class="text-xs sm:text-sm text-pink-400 uppercase tracking-wider">El Pollera de la Semana</h3>
+                <a href={`/players/${weeklyPollera.player.id}`} class="block">
+                  <span class="text-xl sm:text-2xl font-cinzel text-pink-400 hover:text-pink-300">
+                    {weeklyPollera.player.username.toUpperCase()}
+                  </span>
+                </a>
+                <p class="text-aoe-cream-dark text-xs sm:text-sm italic max-w-xs">"{weeklyPollera.frase}"</p>
+              </div>
+            </div>
+
+            <div class="aoe-card px-3 sm:px-4 py-2 border-pink-500/30">
+              <div class="text-xl sm:text-2xl font-cinzel text-pink-400">{weeklyPollera.gamesPlayed}</div>
+              <div class="text-[10px] sm:text-xs text-aoe-cream-dark">Partidas esta semana</div>
             </div>
           </div>
         </div>

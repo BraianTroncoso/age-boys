@@ -54,6 +54,26 @@ const frasesVictima = [
   "lo paseas siempre",
 ];
 
+// Frases para el pollera de la semana (el que menos jugo)
+const frasesPollera = [
+  "La mujer no lo deja ni tocar la PC",
+  "Le sacaron la placa de video de castigo",
+  "Esta domado por la patrona",
+  "Le cortaron el WiFi por mandarina",
+  "Tiene prohibido el Age despues de las 10",
+  "La mujer le puso contraseña a la PC",
+  "Lo tienen de empleado domestico",
+  "El que lava los platos mientras ustedes juegan",
+  "Su novia lo tiene de sirviente",
+  "Le dieron de baja la suscripcion de hombre",
+  "El mas sometido del grupo",
+  "La jermu le escondio el mouse",
+  "Esta en penitencia gamer",
+  "El unico que pide permiso para jugar",
+  "La señora le puso horario de visita al Age",
+  "Vive bajo el regimen de la patrona",
+];
+
 export function getRandomFrase(frases: string[]): string {
   return frases[Math.floor(Math.random() * frases.length)];
 }
@@ -304,5 +324,59 @@ export async function getPlayerFullStats(playerId: number) {
     winRate: totalWins + totalLosses > 0 ? Math.round((totalWins / (totalWins + totalLosses)) * 100) : 0,
     maxWinStreak,
     maxLossStreak,
+  };
+}
+
+/**
+ * Obtiene el pollera de la semana (el que menos partidas jugo en los ultimos 7 dias)
+ * Si hay empate, rota aleatoriamente entre los candidatos
+ */
+export async function getWeeklyPollera() {
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+  const allMatches = await db.matches.findAll();
+  const recentMatches = allMatches.filter(m => new Date(m.playedAt) >= oneWeekAgo);
+
+  // Contar partidas por jugador en la semana
+  const gamesCount: Record<number, number> = {};
+
+  for (const match of recentMatches) {
+    const participants = await db.participants.findByMatchId(match.id);
+    for (const p of participants) {
+      if (!gamesCount[p.playerId]) gamesCount[p.playerId] = 0;
+      gamesCount[p.playerId]++;
+    }
+  }
+
+  // Obtener TODOS los jugadores (incluso los que no jugaron)
+  const allPlayers = await db.users.findAllPlayers();
+
+  // Encontrar minimo de partidas (excluyendo admin)
+  let minGames = Infinity;
+  const candidates: typeof allPlayers = [];
+
+  for (const player of allPlayers) {
+    if (player.username === 'admin') continue;
+
+    const games = gamesCount[player.id] || 0;
+    if (games < minGames) {
+      minGames = games;
+      candidates.length = 0;
+      candidates.push(player);
+    } else if (games === minGames) {
+      candidates.push(player);
+    }
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Random entre candidatos empatados
+  const selected = candidates[Math.floor(Math.random() * candidates.length)];
+
+  return {
+    player: selected,
+    gamesPlayed: minGames === Infinity ? 0 : minGames,
+    frase: getRandomFrase(frasesPollera),
   };
 }

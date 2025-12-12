@@ -35,7 +35,8 @@ src/
 │   ├── auth.ts               # Autenticacion (cookies, sessions)
 │   ├── civilizations.ts      # Lista de civilizaciones AoE3 + banderas + colores
 │   ├── elo.ts                # Sistema ELO y rangos
-│   └── stats.ts              # Estadisticas (rachas, nemesis, etc)
+│   ├── stats.ts              # Estadisticas (rachas, nemesis, etc)
+│   └── tournaments.ts        # Logica de brackets y torneos
 ├── pages/
 │   ├── index.astro           # Home - Rankings con filtros (1v1/Teams/FFA) + Boludo de la semana
 │   ├── login.astro           # Login
@@ -50,12 +51,20 @@ src/
 │   ├── matches/
 │   │   ├── index.astro       # Historial con paginacion + informador
 │   │   └── new.astro         # Registrar partida (UI mejorada)
+│   ├── torneos/
+│   │   ├── index.astro       # Lista de torneos activos/completados
+│   │   ├── nuevo.astro       # Crear torneo (config + seleccion + sorteo)
+│   │   └── [id].astro        # Ver bracket del torneo
 │   └── api/
 │       ├── login.ts          # API login
 │       ├── register.ts       # API registro
 │       ├── logout.ts         # API logout
 │       ├── profile.ts        # API editar perfil
-│       └── matches.ts        # API crear partida
+│       ├── matches.ts        # API crear partida
+│       └── tournaments/
+│           ├── index.ts      # API crear/listar torneos
+│           └── [id]/
+│               └── match.ts  # API registrar ganador
 ```
 
 ## Features Implementadas
@@ -282,6 +291,121 @@ El meme generator usa frases como:
 
 ### Tabla match_participants
 - id, matchId (FK), playerId (FK), team, civilization, isWinner, eloChange
+
+## Sistema de Torneos
+
+### Tipos de Torneo
+- **Eliminacion Directa (single):** Una derrota y quedas eliminado
+- **Doble Eliminacion (double):** Los perdedores tienen segunda oportunidad en Losers Bracket
+
+### Cantidad de Jugadores
+- 4, 6, 8 o 16 jugadores
+- Para 6 jugadores se usan **byes** (2 jugadores pasan directo a semifinales)
+
+### Modos de Torneo
+- **Competitivo:** Las partidas afectan el ELO de los jugadores
+- **Diversion:** Las partidas NO afectan el ELO (para practicar/joder)
+
+### Doble Eliminacion - Estructura
+```
+WINNERS BRACKET:
+- Ganadores avanzan en Winners
+- Perdedores caen al Losers Bracket
+
+LOSERS BRACKET:
+- Ganadores avanzan en Losers
+- Perdedores son ELIMINADOS definitivamente
+
+GRAN FINAL:
+- Campeon Winners vs Campeon Losers
+- Si gana el de Winners: Es campeon
+- Si gana el de Losers: Se juega Final Reset (opcional)
+
+FINAL RESET (configurable):
+- Solo se juega si el campeon de Losers gana la Gran Final
+- Se puede desactivar al crear el torneo
+```
+
+### Archivos del Sistema de Torneos
+
+| Archivo | Descripcion |
+|---------|-------------|
+| `src/db/index.ts` | Interfaces Tournament, TournamentMatch + CRUD |
+| `src/lib/tournaments.ts` | Logica de brackets, avances, generacion |
+| `src/pages/api/tournaments.ts` | API crear/listar torneos |
+| `src/pages/api/tournaments/[id]/match.ts` | API registrar ganador de partida |
+| `src/pages/torneos/index.astro` | Lista de torneos activos/completados |
+| `src/pages/torneos/nuevo.astro` | Crear torneo con ruleta de sorteo |
+| `src/pages/torneos/[id].astro` | Visualizacion del bracket |
+
+### Tablas de Base de Datos
+
+**tournaments:**
+- id, name, size, status, bracketType, bracketReset, affectsElo, winnerId, createdBy, createdAt, completedAt
+
+**tournament_matches:**
+- id, tournamentId, bracket, round, position, player1Id, player2Id, winnerId, matchId, playedAt
+
+### Funciones Principales (lib/tournaments.ts)
+
+- `generateBracketMatches()` - Genera bracket single elimination (con soporte para byes)
+- `generateDoubleEliminationBracket()` - Genera bracket doble eliminacion
+- `getNextMatchSlot()` - Calcula avance en single elimination
+- `getDoubleEliminationNextSlot()` - Calcula avance en doble eliminacion (winner + loser)
+- `getBracketSize()` - Obtiene tamaño de bracket (potencia de 2)
+- `getByeCount()` - Calcula cantidad de byes necesarios
+- `isTournamentComplete()` - Verifica si el torneo termino
+- `getTournamentWinner()` - Obtiene el ganador del torneo
+
+### UI de Creacion de Torneo (torneos/nuevo.astro)
+
+**Paso 1 - Configuracion:**
+- Nombre del torneo
+- Cantidad de jugadores (4, 6, 8, 16)
+- Tipo de eliminacion (Directa / Doble)
+- Modo Competitivo (checkbox - afecta ELO)
+- Final Reset (checkbox - solo doble eliminacion)
+- Boton "Confirmar Configuracion"
+
+**Paso 2 - Seleccionar Jugadores:**
+- Grid de jugadores con tarjetas seleccionables
+- Contador de seleccionados
+- Boton "← Volver" para regresar al paso 1
+- Boton "Sortear Emparejamientos"
+
+**Paso 3 - Sorteo:**
+- Ruleta animada
+- Preview de emparejamientos
+- Boton "← Volver" para regresar al paso 2
+- Boton "Volver a Sortear"
+- Boton "Crear Torneo"
+
+### Visualizacion de Bracket (torneos/[id].astro)
+
+**Single Elimination:**
+- Bracket horizontal con conectores
+- Trofeo al final
+
+**Double Elimination:**
+- Winners Bracket (panel dorado)
+- Losers Bracket (panel rojo)
+- Gran Final (panel destacado)
+- Final Reset (si aplica)
+
+### Endpoints API Torneos
+
+| Metodo | Ruta | Descripcion |
+|--------|------|-------------|
+| GET | /api/tournaments | Listar torneos |
+| POST | /api/tournaments | Crear torneo |
+| POST | /api/tournaments/[id]/match | Registrar ganador de partida |
+
+### Estilos CSS (global.css)
+
+- `.losers-bracket-panel` - Panel rojo para losers
+- `.losers-match`, `.losers-ready` - Matches del losers bracket
+- `.grand-final-panel`, `.grand-final-match` - Gran final
+- `.final-reset-panel`, `.final-reset-match` - Final reset
 
 ## Notas de Desarrollo
 

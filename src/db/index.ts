@@ -271,6 +271,19 @@ export const db = {
         args: [match.matchType, match.createdBy || null]
       });
       return result.rows[0] as unknown as Match;
+    },
+    delete: async (id: number) => {
+      await ensureInit();
+      // Primero eliminar participantes
+      await client.execute({
+        sql: 'DELETE FROM match_participants WHERE matchId = ?',
+        args: [id]
+      });
+      // Luego eliminar partida
+      await client.execute({
+        sql: 'DELETE FROM matches WHERE id = ?',
+        args: [id]
+      });
     }
   },
 

@@ -84,6 +84,18 @@ Lista de sugerencias para futuras iteraciones del proyecto.
 
 ---
 
+## Bugs Pendientes
+
+### Cajas con dimensiones inconsistentes
+- **Ubicacion**: `/matches/new` y `/ruleta`
+- **Problema**: Las cajas se adaptan al contenido en vez de tener dimensiones fijas
+  - En 1v1 las cajas de Ganador/Perdedor son mas pequenas que en 2v2/3v3
+  - En ruleta, nombres largos como "Relampago Marquinhos" expanden las tarjetas
+- **Solucion intentada**: `min-height` con CSS y estilos inline, no funciono por conflictos con `.aoe-card` global
+- **Solucion sugerida**: Revisar especificidad CSS o usar approach diferente (flexbox con altura fija en contenedor padre)
+
+---
+
 ## Notas
 
 - Las tareas de prioridad "Alta" son las que mas impacto tienen con menor esfuerzo

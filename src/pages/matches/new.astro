@@ -34,31 +34,31 @@ const players = allPlayers.filter(p => p.username !== 'admin');
               Tipo de Partida
             </label>
             <div class="grid grid-cols-4 gap-2 sm:gap-3">
-              <label class="cursor-pointer">
+              <label class="cursor-pointer block">
                 <input type="radio" name="matchType" value="1v1" class="peer hidden" checked />
-                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all p-2 sm:p-4">
-                  <span class="text-lg sm:text-2xl block mb-0.5 sm:mb-1">⚔️</span>
+                <div class="match-type-card peer-checked:!border-aoe-gold-light">
+                  <span class="text-lg sm:text-2xl">⚔️</span>
                   <span class="text-xs sm:text-sm">1v1</span>
                 </div>
               </label>
-              <label class="cursor-pointer">
+              <label class="cursor-pointer block">
                 <input type="radio" name="matchType" value="2v2" class="peer hidden" />
-                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all p-2 sm:p-4">
-                  <span class="text-lg sm:text-2xl block mb-0.5 sm:mb-1">⚔️</span>
+                <div class="match-type-card peer-checked:!border-aoe-gold-light">
+                  <span class="text-lg sm:text-2xl">⚔️</span>
                   <span class="text-xs sm:text-sm">2v2</span>
                 </div>
               </label>
-              <label class="cursor-pointer">
+              <label class="cursor-pointer block">
                 <input type="radio" name="matchType" value="3v3" class="peer hidden" />
-                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all p-2 sm:p-4">
-                  <span class="text-lg sm:text-2xl block mb-0.5 sm:mb-1">⚔️</span>
+                <div class="match-type-card peer-checked:!border-aoe-gold-light">
+                  <span class="text-lg sm:text-2xl">⚔️</span>
                   <span class="text-xs sm:text-sm">3v3</span>
                 </div>
               </label>
-              <label class="cursor-pointer">
+              <label class="cursor-pointer block">
                 <input type="radio" name="matchType" value="ffa" class="peer hidden" />
-                <div class="aoe-card text-center peer-checked:border-aoe-gold-light peer-checked:shadow-gold transition-all p-2 sm:p-4">
-                  <span class="text-lg sm:text-2xl block mb-0.5 sm:mb-1">👑</span>
+                <div class="match-type-card peer-checked:!border-aoe-gold-light">
+                  <span class="text-lg sm:text-2xl">👑</span>
                   <span class="text-xs sm:text-sm">FFA</span>
                 </div>
               </label>
@@ -867,6 +867,32 @@ const players = allPlayers.filter(p => p.username !== 'admin');
 </script>
 
 <style>
+  /* Match type cards - todas del mismo tamaño exacto */
+  .match-type-card {
+    width: 100%;
+    height: 70px;
+    padding: 8px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    box-sizing: border-box;
+    background: linear-gradient(to bottom, #3d2a1f, #1a0f0a);
+    border: 3px solid #DAA520;
+    border-radius: 2px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5), 0 0 15px rgba(201, 162, 39, 0.2);
+    transition: all 0.2s ease;
+    color: #f5e6d3;
+  }
+
+  @media (min-width: 640px) {
+    .match-type-card {
+      height: 85px;
+      padding: 12px;
+    }
+  }
+
   /* Player selection styling for randomizer and FFA */
   .random-player-checkbox:checked + .player-card,
   .ffa-player-checkbox:checked + .player-card {
@@ -881,4 +907,5 @@ const players = allPlayers.filter(p => p.username !== 'admin');
     font-weight: 600;
     text-shadow: 0 0 10px rgba(218, 165, 32, 0.5);
   }
+
 </style>
