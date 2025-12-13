@@ -29,7 +29,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     if (!isValidTournamentSize(size)) {
       return new Response(JSON.stringify({
         success: false,
-        error: 'El tamaño debe ser 4, 8 o 16 jugadores'
+        error: 'El tamaño debe ser 4, 6, 8 o 16 jugadores'
       }), {
         status: 400,
         headers: { 'Content-Type': 'application/json' }

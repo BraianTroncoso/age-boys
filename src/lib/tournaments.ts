@@ -164,62 +164,128 @@ export function getLosersRounds(size: number): number {
 
 /**
  * Generate bracket matches for a double elimination tournament
+ * Supports non-power-of-2 player counts using byes (e.g., 6 players)
  */
 export function generateDoubleEliminationBracket(
   tournamentId: number,
   playerIds: number[]
 ): Omit<TournamentMatch, 'id'>[] {
   const shuffled = shuffleArray(playerIds);
-  const totalWinnersRounds = getTotalRounds(shuffled.length);
-  const totalLosersRounds = getLosersRounds(shuffled.length);
+  const playerCount = shuffled.length;
+  const bracketSize = getBracketSize(playerCount);
+  const byeCount = getByeCount(playerCount);
+  const totalWinnersRounds = getTotalRounds(bracketSize);
+  const totalLosersRounds = getLosersRounds(bracketSize);
   const matches: Omit<TournamentMatch, 'id'>[] = [];
 
   // ==================== WINNERS BRACKET ====================
-  // Generate first round with all players
-  const firstRound = totalWinnersRounds;
-  const matchesInFirstRound = shuffled.length / 2;
 
-  for (let i = 0; i < matchesInFirstRound; i++) {
-    matches.push({
-      tournamentId,
-      bracket: 'winners',
-      round: firstRound,
-      position: i,
-      player1Id: shuffled[i * 2],
-      player2Id: shuffled[i * 2 + 1],
-      winnerId: null,
-      matchId: null,
-      playedAt: null
-    });
-  }
+  if (byeCount === 0) {
+    // No byes needed - original logic for power of 2
+    const firstRound = totalWinnersRounds;
+    const matchesInFirstRound = playerCount / 2;
 
-  // Generate empty matches for subsequent winners rounds
-  for (let r = firstRound - 1; r >= 1; r--) {
-    const matchesInRound = Math.pow(2, r - 1);
-    for (let p = 0; p < matchesInRound; p++) {
+    for (let i = 0; i < matchesInFirstRound; i++) {
       matches.push({
         tournamentId,
         bracket: 'winners',
-        round: r,
-        position: p,
-        player1Id: null,
-        player2Id: null,
+        round: firstRound,
+        position: i,
+        player1Id: shuffled[i * 2],
+        player2Id: shuffled[i * 2 + 1],
         winnerId: null,
         matchId: null,
         playedAt: null
       });
     }
+
+    // Generate empty matches for subsequent winners rounds
+    for (let r = firstRound - 1; r >= 1; r--) {
+      const matchesInRound = Math.pow(2, r - 1);
+      for (let p = 0; p < matchesInRound; p++) {
+        matches.push({
+          tournamentId,
+          bracket: 'winners',
+          round: r,
+          position: p,
+          player1Id: null,
+          player2Id: null,
+          winnerId: null,
+          matchId: null,
+          playedAt: null
+        });
+      }
+    }
+  } else {
+    // Handle byes (e.g., 6 players -> bracketSize=8, byeCount=2)
+    const firstRound = totalWinnersRounds;
+    const playersWithByes = shuffled.slice(0, byeCount);
+    const playersInFirstRound = shuffled.slice(byeCount);
+    const matchesInFirstRound = playersInFirstRound.length / 2;
+
+    // First round matches (only for players without byes)
+    // Positions are offset by byeCount to leave room for bye "slots"
+    for (let i = 0; i < matchesInFirstRound; i++) {
+      matches.push({
+        tournamentId,
+        bracket: 'winners',
+        round: firstRound,
+        position: i + byeCount,
+        player1Id: playersInFirstRound[i * 2],
+        player2Id: playersInFirstRound[i * 2 + 1],
+        winnerId: null,
+        matchId: null,
+        playedAt: null
+      });
+    }
+
+    // Second round (where bye players enter)
+    const secondRound = firstRound - 1;
+    const matchesInSecondRound = bracketSize / 4;
+
+    for (let p = 0; p < matchesInSecondRound; p++) {
+      // First positions get bye players
+      const hasByePlayer = p < byeCount;
+      matches.push({
+        tournamentId,
+        bracket: 'winners',
+        round: secondRound,
+        position: p,
+        player1Id: hasByePlayer ? playersWithByes[p] : null,
+        player2Id: null, // Will be filled by first round winners
+        winnerId: null,
+        matchId: null,
+        playedAt: null
+      });
+    }
+
+    // Generate remaining winners rounds (final, etc.)
+    for (let r = secondRound - 1; r >= 1; r--) {
+      const matchesInRound = Math.pow(2, r - 1);
+      for (let p = 0; p < matchesInRound; p++) {
+        matches.push({
+          tournamentId,
+          bracket: 'winners',
+          round: r,
+          position: p,
+          player1Id: null,
+          player2Id: null,
+          winnerId: null,
+          matchId: null,
+          playedAt: null
+        });
+      }
+    }
   }
 
   // ==================== LOSERS BRACKET ====================
-  // Losers bracket structure varies by tournament size
-  // For 4 players: LR2 (1 match), LR1 (1 match)
-  // For 8 players: LR4 (2 matches), LR3 (2 matches), LR2 (1 match), LR1 (1 match)
-  // For 16 players: LR6 (4 matches), LR5 (4 matches), LR4 (2 matches), LR3 (2 matches), LR2 (1 match), LR1 (1 match)
+  // Structure is based on bracketSize, not playerCount
+  // For 8-size bracket: LR4 (2 matches), LR3 (2 matches), LR2 (1 match), LR1 (1 match)
+  // With byes, some slots may stay empty (no losers from bye positions)
 
-  // Losers bracket has alternating rounds of "drop-in" (from winners) and "consolidation"
+  const matchesInFirstWinnersRound = bracketSize / 2;
   let currentLosersRound = totalLosersRounds;
-  let matchesInCurrentLosersRound = matchesInFirstRound / 2; // Starts with half of first winners round
+  let matchesInCurrentLosersRound = matchesInFirstWinnersRound / 2;
 
   while (currentLosersRound >= 1) {
     for (let p = 0; p < matchesInCurrentLosersRound; p++) {
@@ -298,6 +364,7 @@ export function getNextMatchSlot(
 /**
  * Calculate where a player should advance to in Double Elimination
  * Returns info about where both winner and loser go
+ * Handles tournaments with byes (non-power-of-2 player counts)
  */
 export function getDoubleEliminationNextSlot(
   match: TournamentMatch,
@@ -309,8 +376,11 @@ export function getDoubleEliminationNextSlot(
   nextPosition: number;
   slot: 'player1Id' | 'player2Id';
 } | null {
-  const totalWinnersRounds = getTotalRounds(tournamentSize);
-  const totalLosersRounds = getLosersRounds(tournamentSize);
+  // Use bracket size (power of 2) for all calculations
+  const bracketSize = getBracketSize(tournamentSize);
+  const byeCount = getByeCount(tournamentSize);
+  const totalWinnersRounds = getTotalRounds(bracketSize);
+  const totalLosersRounds = getLosersRounds(bracketSize);
 
   // ==================== WINNERS BRACKET ====================
   if (match.bracket === 'winners') {
@@ -351,18 +421,29 @@ export function getDoubleEliminationNextSlot(
       // WR2 losers (from top round 2) -> top losers round (even number)
       // WR3 losers (from top round 3) -> losers round 2 below max (every 2 rounds down from top)
       const losersRound = totalLosersRounds - (winnersRoundFromTop - 1) * 2;
-      const nextPosition = match.position;
 
       // Losers from winners enter as player2 in their losers round (player1 comes from lower losers round)
       // Exception: first losers round where losers fight each other
       if (losersRound === totalLosersRounds) {
         // First losers round - losers from first winners round fight each other
-        const slot = match.position % 2 === 0 ? 'player1Id' : 'player2Id';
-        const adjustedPosition = Math.floor(match.position / 2);
-        return { bracket: 'losers', nextRound: losersRound, nextPosition: adjustedPosition, slot };
+        const isFirstWinnersRound = match.round === totalWinnersRounds;
+
+        if (isFirstWinnersRound && byeCount > 0) {
+          // With byes, positions are offset by byeCount
+          // Adjust position back to 0-indexed relative to actual matches
+          const relativePosition = match.position - byeCount;
+          const slot = relativePosition % 2 === 0 ? 'player1Id' : 'player2Id';
+          const adjustedPosition = Math.floor(relativePosition / 2);
+          return { bracket: 'losers', nextRound: losersRound, nextPosition: adjustedPosition, slot };
+        } else {
+          // No byes or not first round
+          const slot = match.position % 2 === 0 ? 'player1Id' : 'player2Id';
+          const adjustedPosition = Math.floor(match.position / 2);
+          return { bracket: 'losers', nextRound: losersRound, nextPosition: adjustedPosition, slot };
+        }
       } else {
         // Drop-in round - come in as player2
-        return { bracket: 'losers', nextRound: losersRound, nextPosition, slot: 'player2Id' };
+        return { bracket: 'losers', nextRound: losersRound, nextPosition: match.position, slot: 'player2Id' };
       }
     }
   }
