@@ -6,7 +6,7 @@ export const GET: APIRoute = async () => {
     status: 302,
     headers: {
       'Location': '/login',
-      'Set-Cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0`,
+      'Set-Cookie': `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
     },
   });
 };

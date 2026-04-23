@@ -5,11 +5,11 @@ import { getNextMatchSlot, getDoubleEliminationNextSlot, isTournamentComplete, g
 
 export const POST: APIRoute = async ({ params, request, locals }) => {
   try {
-    const tournamentId = parseInt(params.id || '0');
+    const tournamentId = params.id || '';
     const body = await request.json();
     const { tournamentMatchId, winnerId } = body as {
-      tournamentMatchId: number;
-      winnerId: number;
+      tournamentMatchId: string;
+      winnerId: string;
     };
 
     // Validate tournament exists

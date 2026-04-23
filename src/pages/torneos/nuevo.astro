@@ -338,7 +338,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
     selectedPlayers = Array.from(checkboxes)
       .filter(cb => cb.checked)
       .map(cb => ({
-        id: parseInt(cb.value),
+        id: cb.value,
         name: cb.dataset.name
       }));
 

@@ -128,7 +128,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
 
     const selectedOption = select.options[select.selectedIndex];
     if (selectedOption && selectedOption.value) {
-      const player = playersMap[parseInt(selectedOption.value)];
+      const player = playersMap[selectedOption.value];
       if (player && player.favoriteCiv) {
         display.textContent = `Civilización: ${player.favoriteCiv}`;
         display.classList.remove('hidden');
@@ -387,7 +387,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
             <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 1</h3>
             <div class="space-y-3">
               ${team1.map((p, i) => {
-                const player = playersMap[parseInt(p.id)];
+                const player = playersMap[p.id];
                 const civ = player?.favoriteCiv || 'spanish';
                 return `
                   <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30">
@@ -410,7 +410,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
             <h3 class="aoe-title text-lg mb-4">⚔️ Equipo 2</h3>
             <div class="space-y-3">
               ${team2.map((p, i) => {
-                const player = playersMap[parseInt(p.id)];
+                const player = playersMap[p.id];
                 const civ = player?.favoriteCiv || 'spanish';
                 return `
                   <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-aoe-gold/30">
@@ -531,7 +531,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
           <p class="text-sm text-aoe-cream-dark mb-3">Selecciona quién ganó:</p>
           <div class="space-y-2" id="ffaWinnerSelection">
             ${ffaPlayers.map(p => {
-              const player = playersMap[parseInt(p.id)];
+              const player = playersMap[p.id];
               const civ = player?.favoriteCiv || 'spanish';
               return `
                 <label class="cursor-pointer block">
@@ -570,7 +570,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
             // Update losers display
             const ffaLosersDisplay = document.getElementById('ffaLosersDisplay');
             ffaLosersDisplay.innerHTML = losers.map((p, i) => {
-              const player = playersMap[parseInt(p.id)];
+              const player = playersMap[p.id];
               const civ = player?.favoriteCiv || 'spanish';
               return `
                 <div class="flex items-center gap-3 p-3 bg-aoe-dark/50 rounded border border-red-500/30">
@@ -631,7 +631,7 @@ const players = allPlayers.filter(p => p.username !== 'admin');
 
     // Helper to get player's civilization
     function getPlayerCiv(playerId) {
-      const player = playersMap[parseInt(playerId)];
+      const player = playersMap[playerId];
       return player?.favoriteCiv || 'spanish';
     }
 
@@ -640,8 +640,8 @@ const players = allPlayers.filter(p => p.username !== 'admin');
       const p1 = formData.get('team1_player1');
       const p2 = formData.get('team2_player1');
       data.participants = [
-        { playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: true },
-        { playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: false },
+        { playerId: p1, civilization: getPlayerCiv(p1), team: 1, isWinner: true },
+        { playerId: p2, civilization: getPlayerCiv(p2), team: 2, isWinner: false },
       ];
     } else if (matchType === '2v2' || matchType === '3v3') {
       const teamSize = matchType === '2v2' ? 2 : 3;
@@ -649,20 +649,20 @@ const players = allPlayers.filter(p => p.username !== 'admin');
 
       for (let i = 1; i <= teamSize; i++) {
         const p1 = formData.get(`team1_player${i}`);
-        if (p1) data.participants.push({ playerId: parseInt(p1), civilization: getPlayerCiv(p1), team: 1, isWinner: winningTeam === 1 });
+        if (p1) data.participants.push({ playerId: p1, civilization: getPlayerCiv(p1), team: 1, isWinner: winningTeam === 1 });
 
         const p2 = formData.get(`team2_player${i}`);
-        if (p2) data.participants.push({ playerId: parseInt(p2), civilization: getPlayerCiv(p2), team: 2, isWinner: winningTeam === 2 });
+        if (p2) data.participants.push({ playerId: p2, civilization: getPlayerCiv(p2), team: 2, isWinner: winningTeam === 2 });
       }
     } else if (matchType === 'ffa') {
       const winner = formData.get('team1_player1');
-      data.participants.push({ playerId: parseInt(winner), civilization: getPlayerCiv(winner), team: null, isWinner: true });
+      data.participants.push({ playerId: winner, civilization: getPlayerCiv(winner), team: null, isWinner: true });
 
       // Collect all losers
       let i = 1;
       while (formData.get(`team2_player${i}`)) {
         const loser = formData.get(`team2_player${i}`);
-        data.participants.push({ playerId: parseInt(loser), civilization: getPlayerCiv(loser), team: null, isWinner: false });
+        data.participants.push({ playerId: loser, civilization: getPlayerCiv(loser), team: null, isWinner: false });
         i++;
       }
     }

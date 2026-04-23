@@ -9,7 +9,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const { name, size, playerIds, bracketType = 'single', bracketReset = true, affectsElo = true } = body as {
       name: string;
       size: number;
-      playerIds: number[];
+      playerIds: string[];
       bracketType?: BracketType;
       bracketReset?: boolean;
       affectsElo?: boolean;
@@ -87,7 +87,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
     const tournament = await db.tournaments.create({
       name: name.trim(),
       size,
-      createdBy: locals.user?.id || 0,
+      createdBy: locals.user?.id || '',
       bracketType,
       bracketReset,
       affectsElo

@@ -1,36 +1,31 @@
-import { createClient } from '@libsql/client';
+import { adminDb } from '../lib/firebase/admin';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 
-// Turso client
-const client = createClient({
-  url: import.meta.env.TURSO_DATABASE_URL || process.env.TURSO_DATABASE_URL || '',
-  authToken: import.meta.env.TURSO_AUTH_TOKEN || process.env.TURSO_AUTH_TOKEN || '',
-});
-
-// Interfaces
+// Interfaces - IDs are now strings (Firestore doc IDs)
 interface User {
-  id: number;
+  id: string;
   username: string;
-  passwordHash: string;
+  email?: string;
   favoriteCiv: string;
   eloRating: number;
   eloTeams: number;
   eloFfa: number;
-  isAdmin: number;
+  isAdmin: boolean;
   createdAt: string;
 }
 
 interface Match {
-  id: number;
+  id: string;
   matchType: string;
   playedAt: string;
-  createdBy: number | null;
+  createdBy: string | null;
   createdAt: string;
 }
 
 interface MatchParticipant {
-  id: number;
-  matchId: number;
-  playerId: number;
+  id: string;
+  matchId: string;
+  playerId: string;
   team: number | null;
   civilization: string;
   isWinner: boolean;
@@ -38,929 +33,598 @@ interface MatchParticipant {
 }
 
 interface Tournament {
-  id: number;
+  id: string;
   name: string;
   size: number;
   status: 'active' | 'completed' | 'cancelled';
   bracketType: 'single' | 'double';
   bracketReset: boolean;
   affectsElo: boolean;
-  winnerId: number | null;
-  createdBy: number;
+  winnerId: string | null;
+  createdBy: string;
   createdAt: string;
   completedAt: string | null;
 }
 
 interface TournamentMatch {
-  id: number;
-  tournamentId: number;
+  id: string;
+  tournamentId: string;
   bracket: 'winners' | 'losers' | 'grand_final' | 'final_reset';
   round: number;
   position: number;
-  player1Id: number | null;
-  player2Id: number | null;
-  winnerId: number | null;
-  matchId: number | null;
+  player1Id: string | null;
+  player2Id: string | null;
+  winnerId: string | null;
+  matchId: string | null;
   playedAt: string | null;
 }
 
-// Initialize tables
-async function initTables() {
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      username TEXT UNIQUE NOT NULL,
-      passwordHash TEXT NOT NULL,
-      favoriteCiv TEXT DEFAULT 'spanish',
-      eloRating REAL DEFAULT 1000,
-      eloTeams REAL DEFAULT 1000,
-      eloFfa REAL DEFAULT 1000,
-      isAdmin INTEGER DEFAULT 0,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      matchType TEXT NOT NULL,
-      createdBy INTEGER,
-      playedAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP
-    )
-  `);
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS match_participants (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      matchId INTEGER NOT NULL,
-      playerId INTEGER NOT NULL,
-      team INTEGER,
-      civilization TEXT,
-      isWinner INTEGER DEFAULT 0,
-      eloChange REAL DEFAULT 0
-    )
-  `);
-
-  // Índices para mejorar rendimiento de consultas
-  try {
-    await client.execute(`CREATE INDEX IF NOT EXISTS idx_participants_player ON match_participants(playerId)`);
-    await client.execute(`CREATE INDEX IF NOT EXISTS idx_participants_match ON match_participants(matchId)`);
-    await client.execute(`CREATE INDEX IF NOT EXISTS idx_matches_played ON matches(playedAt DESC)`);
-    await client.execute(`CREATE INDEX IF NOT EXISTS idx_users_elo ON users(eloRating DESC)`);
-  } catch (e) { /* Indices may already exist */ }
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS tournaments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      name TEXT NOT NULL,
-      size INTEGER NOT NULL,
-      status TEXT DEFAULT 'active',
-      bracketType TEXT DEFAULT 'single',
-      bracketReset INTEGER DEFAULT 1,
-      affectsElo INTEGER DEFAULT 1,
-      winnerId INTEGER,
-      createdBy INTEGER,
-      createdAt TEXT DEFAULT CURRENT_TIMESTAMP,
-      completedAt TEXT
-    )
-  `);
-
-  // Add columns if they don't exist (for existing databases)
-  try {
-    await client.execute(`ALTER TABLE tournaments ADD COLUMN bracketType TEXT DEFAULT 'single'`);
-  } catch (e) { /* Column already exists */ }
-  try {
-    await client.execute(`ALTER TABLE tournaments ADD COLUMN bracketReset INTEGER DEFAULT 1`);
-  } catch (e) { /* Column already exists */ }
-  try {
-    await client.execute(`ALTER TABLE tournaments ADD COLUMN affectsElo INTEGER DEFAULT 1`);
-  } catch (e) { /* Column already exists */ }
-
-  await client.execute(`
-    CREATE TABLE IF NOT EXISTS tournament_matches (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      tournamentId INTEGER NOT NULL,
-      bracket TEXT DEFAULT 'winners',
-      round INTEGER NOT NULL,
-      position INTEGER NOT NULL,
-      player1Id INTEGER,
-      player2Id INTEGER,
-      winnerId INTEGER,
-      matchId INTEGER,
-      playedAt TEXT,
-      UNIQUE(tournamentId, bracket, round, position)
-    )
-  `);
-
-  // Add bracket column if it doesn't exist (for existing databases)
-  try {
-    await client.execute(`ALTER TABLE tournament_matches ADD COLUMN bracket TEXT DEFAULT 'winners'`);
-  } catch (e) { /* Column already exists */ }
+// Helpers
+function toISO(val: any): string {
+  if (val instanceof Timestamp) return val.toDate().toISOString();
+  if (val instanceof Date) return val.toISOString();
+  return val || new Date().toISOString();
 }
 
-// Initialize on first import
-let initialized = false;
-async function ensureInit() {
-  if (!initialized) {
-    await initTables();
-    initialized = true;
-  }
+function docToUser(doc: FirebaseFirestore.DocumentSnapshot): User | undefined {
+  if (!doc.exists) return undefined;
+  const d = doc.data()!;
+  return {
+    id: doc.id,
+    username: d.username,
+    email: d.email,
+    favoriteCiv: d.favoriteCiv || 'spanish',
+    eloRating: d.eloRating ?? 1000,
+    eloTeams: d.eloTeams ?? 1000,
+    eloFfa: d.eloFfa ?? 1000,
+    isAdmin: d.isAdmin ?? false,
+    createdAt: toISO(d.createdAt),
+  };
 }
 
-// Simple in-memory cache with TTL
-const cache = new Map<string, { data: any; expires: number }>();
-const CACHE_TTL = 5000; // 5 seconds
-
-function getCached<T>(key: string): T | null {
-  const cached = cache.get(key);
-  if (cached && Date.now() < cached.expires) {
-    return cached.data as T;
-  }
-  cache.delete(key);
-  return null;
+function docToMatch(doc: FirebaseFirestore.DocumentSnapshot): Match | undefined {
+  if (!doc.exists) return undefined;
+  const d = doc.data()!;
+  return {
+    id: doc.id,
+    matchType: d.matchType,
+    createdBy: d.createdBy || null,
+    playedAt: toISO(d.playedAt),
+    createdAt: toISO(d.createdAt),
+  };
 }
 
-function setCache(key: string, data: any): void {
-  cache.set(key, { data, expires: Date.now() + CACHE_TTL });
+function docToTournament(doc: FirebaseFirestore.DocumentSnapshot): Tournament | undefined {
+  if (!doc.exists) return undefined;
+  const d = doc.data()!;
+  return {
+    id: doc.id,
+    name: d.name,
+    size: d.size,
+    status: d.status || 'active',
+    bracketType: d.bracketType || 'single',
+    bracketReset: d.bracketReset ?? true,
+    affectsElo: d.affectsElo ?? true,
+    winnerId: d.winnerId || null,
+    createdBy: d.createdBy,
+    createdAt: toISO(d.createdAt),
+    completedAt: d.completedAt ? toISO(d.completedAt) : null,
+  };
 }
 
-// Clear cache when data changes
-export function invalidateCache(): void {
-  cache.clear();
+function docToTournamentMatch(doc: FirebaseFirestore.DocumentSnapshot): TournamentMatch | undefined {
+  if (!doc.exists) return undefined;
+  const d = doc.data()!;
+  return {
+    id: doc.id,
+    tournamentId: d.tournamentId,
+    bracket: d.bracket || 'winners',
+    round: d.round,
+    position: d.position,
+    player1Id: d.player1Id || null,
+    player2Id: d.player2Id || null,
+    winnerId: d.winnerId || null,
+    matchId: d.matchId || null,
+    playedAt: d.playedAt ? toISO(d.playedAt) : null,
+  };
 }
 
-// Database operations
+// Collections
+const usersCol = () => adminDb.collection('users');
+const matchesCol = () => adminDb.collection('matches');
+const tournamentsCol = () => adminDb.collection('tournaments');
+const tournamentMatchesCol = () => adminDb.collection('tournamentMatches');
+
+export function invalidateCache(): void {}
+
 export const db = {
   users: {
     findAll: async (): Promise<User[]> => {
-      await ensureInit();
-      const result = await client.execute('SELECT * FROM users ORDER BY eloRating DESC');
-      return result.rows as unknown as User[];
+      const snap = await usersCol().orderBy('eloRating', 'desc').get();
+      return snap.docs.map(d => docToUser(d)!);
     },
     findAllPlayers: async (orderBy: 'eloRating' | 'eloTeams' | 'eloFfa' = 'eloRating'): Promise<User[]> => {
-      await ensureInit();
-      const cacheKey = `players_${orderBy}`;
-      const cached = getCached<User[]>(cacheKey);
-      if (cached) return cached;
-
-      // Excluir admin del ranking
-      const result = await client.execute(`SELECT * FROM users WHERE username != 'admin' ORDER BY ${orderBy} DESC`);
-      const data = result.rows as unknown as User[];
-      setCache(cacheKey, data);
-      return data;
+      const snap = await usersCol().orderBy(orderBy, 'desc').get();
+      return snap.docs.map(d => docToUser(d)!).filter(u => !u.isAdmin);
     },
     findAllPlayersWithStats: async (orderBy: 'eloRating' | 'eloTeams' | 'eloFfa' = 'eloRating'): Promise<Array<User & { totalMatches: number; wins: number }>> => {
-      await ensureInit();
-      const cacheKey = `players_stats_${orderBy}`;
-      const cached = getCached<Array<User & { totalMatches: number; wins: number }>>(cacheKey);
-      if (cached) return cached;
+      const [usersSnap, matchesSnap] = await Promise.all([
+        usersCol().orderBy(orderBy, 'desc').get(),
+        matchesCol().get(),
+      ]);
+      const users = usersSnap.docs.map(d => docToUser(d)!).filter(u => !u.isAdmin);
 
-      // Una sola consulta con LEFT JOIN y agregación
-      const result = await client.execute(`
-        SELECT
-          u.*,
-          COUNT(mp.id) as totalMatches,
-          SUM(CASE WHEN mp.isWinner = 1 THEN 1 ELSE 0 END) as wins
-        FROM users u
-        LEFT JOIN match_participants mp ON u.id = mp.playerId
-        WHERE u.username != 'admin'
-        GROUP BY u.id
-        ORDER BY u.${orderBy} DESC
-      `);
-      const data = result.rows.map((row: any) => ({
-        ...row,
-        totalMatches: row.totalMatches || 0,
-        wins: row.wins || 0
-      })) as Array<User & { totalMatches: number; wins: number }>;
-      setCache(cacheKey, data);
-      return data;
+      const statsMap = new Map<string, { total: number; wins: number }>();
+      for (const doc of matchesSnap.docs) {
+        const participants = doc.data().participants || [];
+        for (const p of participants) {
+          const s = statsMap.get(p.playerId) || { total: 0, wins: 0 };
+          s.total++;
+          if (p.isWinner) s.wins++;
+          statsMap.set(p.playerId, s);
+        }
+      }
+
+      return users.map(u => ({
+        ...u,
+        totalMatches: statsMap.get(u.id)?.total || 0,
+        wins: statsMap.get(u.id)?.wins || 0,
+      }));
     },
     findByUsername: async (username: string): Promise<User | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM users WHERE username = ?',
-        args: [username]
-      });
-      return result.rows[0] as unknown as User | undefined;
+      const snap = await usersCol().where('username', '==', username).limit(1).get();
+      return snap.empty ? undefined : docToUser(snap.docs[0]);
     },
-    findById: async (id: number): Promise<User | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM users WHERE id = ?',
-        args: [id]
-      });
-      return result.rows[0] as unknown as User | undefined;
+    findById: async (id: string): Promise<User | undefined> => {
+      const doc = await usersCol().doc(id).get();
+      return docToUser(doc);
     },
-    create: async (user: { username: string; passwordHash: string; favoriteCiv: string }): Promise<User> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'INSERT INTO users (username, passwordHash, favoriteCiv) VALUES (?, ?, ?) RETURNING *',
-        args: [user.username, user.passwordHash, user.favoriteCiv]
-      });
-      return result.rows[0] as unknown as User;
+    create: async (user: { id: string; username: string; email?: string; favoriteCiv: string }): Promise<User> => {
+      const data = {
+        username: user.username,
+        email: user.email || undefined,
+        favoriteCiv: user.favoriteCiv,
+        eloRating: 1000,
+        eloTeams: 1000,
+        eloFfa: 1000,
+        isAdmin: false,
+        createdAt: FieldValue.serverTimestamp(),
+      };
+      await usersCol().doc(user.id).set(data);
+      return { id: user.id, ...data, isAdmin: false, eloRating: 1000, eloTeams: 1000, eloFfa: 1000, createdAt: new Date().toISOString() };
     },
-    update: async (id: number, updates: Partial<User>) => {
-      await ensureInit();
-      const fields: string[] = [];
-      const values: any[] = [];
-
-      if (updates.favoriteCiv !== undefined) {
-        fields.push('favoriteCiv = ?');
-        values.push(updates.favoriteCiv);
+    update: async (id: string, updates: Partial<User>) => {
+      const cleaned: Record<string, any> = {};
+      if (updates.favoriteCiv !== undefined) cleaned.favoriteCiv = updates.favoriteCiv;
+      if (updates.eloRating !== undefined) cleaned.eloRating = updates.eloRating;
+      if (updates.eloTeams !== undefined) cleaned.eloTeams = updates.eloTeams;
+      if (updates.eloFfa !== undefined) cleaned.eloFfa = updates.eloFfa;
+      if (updates.isAdmin !== undefined) cleaned.isAdmin = updates.isAdmin;
+      if (Object.keys(cleaned).length > 0) {
+        await usersCol().doc(id).update(cleaned);
       }
-      if (updates.eloRating !== undefined) {
-        fields.push('eloRating = ?');
-        values.push(updates.eloRating);
-      }
-      if (updates.eloTeams !== undefined) {
-        fields.push('eloTeams = ?');
-        values.push(updates.eloTeams);
-      }
-      if (updates.eloFfa !== undefined) {
-        fields.push('eloFfa = ?');
-        values.push(updates.eloFfa);
-      }
-      if (updates.isAdmin !== undefined) {
-        fields.push('isAdmin = ?');
-        values.push(updates.isAdmin);
-      }
-
-      if (fields.length > 0) {
-        values.push(id);
-        await client.execute({
-          sql: `UPDATE users SET ${fields.join(', ')} WHERE id = ?`,
-          args: values
-        });
-      }
-    }
+    },
   },
 
-  // Alias for compatibility
   players: {
-    findAll: async (): Promise<User[]> => {
-      return db.users.findAll();
-    },
-    findById: async (id: number): Promise<User | undefined> => {
-      return db.users.findById(id);
-    },
-    findByName: async (name: string): Promise<User | undefined> => {
-      return db.users.findByUsername(name);
-    },
-    update: async (id: number, updates: Partial<User>) => {
-      return db.users.update(id, updates);
-    }
+    findAll: async (): Promise<User[]> => db.users.findAll(),
+    findById: async (id: string): Promise<User | undefined> => db.users.findById(id),
+    findByName: async (name: string): Promise<User | undefined> => db.users.findByUsername(name),
+    update: async (id: string, updates: Partial<User>) => db.users.update(id, updates),
   },
 
   matches: {
     findAll: async (): Promise<Match[]> => {
-      await ensureInit();
-      const result = await client.execute('SELECT * FROM matches ORDER BY playedAt DESC');
-      return result.rows as unknown as Match[];
+      const snap = await matchesCol().orderBy('playedAt', 'desc').get();
+      return snap.docs.map(d => docToMatch(d)!);
     },
-    findRecentWithParticipants: async (limit: number = 5): Promise<Array<Match & { participants: Array<MatchParticipant & { playerName: string }> }>> => {
-      await ensureInit();
-      // Single query with JOIN to get matches + participants + player names
-      const result = await client.execute({
-        sql: `
-          SELECT
-            m.id as matchId, m.matchType, m.playedAt, m.createdBy, m.createdAt,
-            mp.id as participantId, mp.playerId, mp.team, mp.civilization, mp.isWinner, mp.eloChange,
-            u.username as playerName
-          FROM matches m
-          LEFT JOIN match_participants mp ON m.id = mp.matchId
-          LEFT JOIN users u ON mp.playerId = u.id
-          ORDER BY m.playedAt DESC
-          LIMIT ?
-        `,
-        args: [limit * 10] // Get enough rows to cover participants
+    findRecentWithParticipants: async (limit: number = 5) => {
+      const snap = await matchesCol().orderBy('playedAt', 'desc').limit(limit).get();
+      return snap.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          matchType: d.matchType,
+          playedAt: toISO(d.playedAt),
+          createdBy: d.createdBy || null,
+          createdAt: toISO(d.createdAt),
+          participants: (d.participants || []).map((p: any) => ({
+            ...p,
+            matchId: doc.id,
+            isWinner: Boolean(p.isWinner),
+            playerName: p.playerName || 'Unknown',
+          })),
+        };
       });
-
-      // Group by match
-      const matchesMap = new Map<number, Match & { participants: Array<MatchParticipant & { playerName: string }> }>();
-
-      for (const row of result.rows as any[]) {
-        if (!matchesMap.has(row.matchId)) {
-          matchesMap.set(row.matchId, {
-            id: row.matchId,
-            matchType: row.matchType,
-            playedAt: row.playedAt,
-            createdBy: row.createdBy,
-            createdAt: row.createdAt,
-            participants: []
-          });
-        }
-
-        if (row.participantId) {
-          matchesMap.get(row.matchId)!.participants.push({
-            id: row.participantId,
-            matchId: row.matchId,
-            playerId: row.playerId,
-            team: row.team,
-            civilization: row.civilization,
-            isWinner: Boolean(row.isWinner),
-            eloChange: row.eloChange,
-            playerName: row.playerName || 'Unknown'
-          });
-        }
-      }
-
-      // Return only the requested number of matches
-      return Array.from(matchesMap.values()).slice(0, limit);
     },
     countAll: async (): Promise<number> => {
-      await ensureInit();
-      const result = await client.execute('SELECT COUNT(*) as count FROM matches');
-      return (result.rows[0] as any).count;
+      const snap = await matchesCol().count().get();
+      return snap.data().count;
     },
-    findPaginatedWithParticipants: async (page: number = 1, perPage: number = 5): Promise<{ matches: Array<Match & { participants: Array<MatchParticipant & { playerName: string; creatorName?: string }> }>; total: number }> => {
-      await ensureInit();
+    findPaginatedWithParticipants: async (page: number = 1, perPage: number = 5) => {
+      const total = await db.matches.countAll();
       const offset = (page - 1) * perPage;
+      const snap = await matchesCol().orderBy('playedAt', 'desc').offset(offset).limit(perPage).get();
 
-      // Get total count
-      const countResult = await client.execute('SELECT COUNT(*) as count FROM matches');
-      const total = (countResult.rows[0] as any).count;
-
-      // Get paginated matches with participants in one query
-      const result = await client.execute({
-        sql: `
-          SELECT
-            m.id as matchId, m.matchType, m.playedAt, m.createdBy, m.createdAt,
-            mp.id as participantId, mp.playerId, mp.team, mp.civilization, mp.isWinner, mp.eloChange,
-            u.username as playerName,
-            creator.username as creatorName
-          FROM (SELECT * FROM matches ORDER BY playedAt DESC LIMIT ? OFFSET ?) m
-          LEFT JOIN match_participants mp ON m.id = mp.matchId
-          LEFT JOIN users u ON mp.playerId = u.id
-          LEFT JOIN users creator ON m.createdBy = creator.id
-          ORDER BY m.playedAt DESC
-        `,
-        args: [perPage, offset]
+      const matches = snap.docs.map(doc => {
+        const d = doc.data();
+        return {
+          id: doc.id,
+          matchType: d.matchType,
+          playedAt: toISO(d.playedAt),
+          createdBy: d.createdBy || null,
+          createdAt: toISO(d.createdAt),
+          creatorName: d.creatorName || null,
+          participants: (d.participants || []).map((p: any) => ({
+            ...p,
+            matchId: doc.id,
+            isWinner: Boolean(p.isWinner),
+            playerName: p.playerName || 'Unknown',
+          })),
+        };
       });
-
-      const matchesMap = new Map<number, Match & { participants: Array<MatchParticipant & { playerName: string }>; creatorName?: string }>();
-
-      for (const row of result.rows as any[]) {
-        if (!matchesMap.has(row.matchId)) {
-          matchesMap.set(row.matchId, {
-            id: row.matchId,
-            matchType: row.matchType,
-            playedAt: row.playedAt,
-            createdBy: row.createdBy,
-            createdAt: row.createdAt,
-            creatorName: row.creatorName,
-            participants: []
-          });
-        }
-
-        if (row.participantId) {
-          matchesMap.get(row.matchId)!.participants.push({
-            id: row.participantId,
-            matchId: row.matchId,
-            playerId: row.playerId,
-            team: row.team,
-            civilization: row.civilization,
-            isWinner: Boolean(row.isWinner),
-            eloChange: row.eloChange,
-            playerName: row.playerName || 'Unknown'
-          });
-        }
+      return { matches, total };
+    },
+    findById: async (id: string): Promise<Match | undefined> => {
+      const doc = await matchesCol().doc(id).get();
+      return docToMatch(doc);
+    },
+    create: async (match: { matchType: string; createdBy?: string }): Promise<Match> => {
+      const data = {
+        matchType: match.matchType,
+        createdBy: match.createdBy || null,
+        creatorName: null as string | null,
+        playedAt: FieldValue.serverTimestamp(),
+        createdAt: FieldValue.serverTimestamp(),
+        playerIds: [] as string[],
+        participants: [] as any[],
+      };
+      if (match.createdBy) {
+        const creator = await db.users.findById(match.createdBy);
+        data.creatorName = creator?.username || null;
       }
-
-      return { matches: Array.from(matchesMap.values()), total };
+      const ref = await matchesCol().add(data);
+      return { id: ref.id, matchType: match.matchType, createdBy: match.createdBy || null, playedAt: new Date().toISOString(), createdAt: new Date().toISOString() };
     },
-    findById: async (id: number): Promise<Match | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM matches WHERE id = ?',
-        args: [id]
-      });
-      return result.rows[0] as unknown as Match | undefined;
+    delete: async (id: string) => {
+      await matchesCol().doc(id).delete();
     },
-    create: async (match: { matchType: string; createdBy?: number }): Promise<Match> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'INSERT INTO matches (matchType, createdBy) VALUES (?, ?) RETURNING *',
-        args: [match.matchType, match.createdBy || null]
-      });
-      return result.rows[0] as unknown as Match;
-    },
-    delete: async (id: number) => {
-      await ensureInit();
-      // Primero eliminar participantes
-      await client.execute({
-        sql: 'DELETE FROM match_participants WHERE matchId = ?',
-        args: [id]
-      });
-      // Luego eliminar partida
-      await client.execute({
-        sql: 'DELETE FROM matches WHERE id = ?',
-        args: [id]
-      });
-    }
   },
 
   participants: {
-    findByMatchId: async (matchId: number): Promise<MatchParticipant[]> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM match_participants WHERE matchId = ?',
-        args: [matchId]
-      });
-      return result.rows.map(row => ({
-        ...row,
-        isWinner: Boolean(row.isWinner)
-      })) as unknown as MatchParticipant[];
+    findByMatchId: async (matchId: string): Promise<MatchParticipant[]> => {
+      const doc = await matchesCol().doc(matchId).get();
+      if (!doc.exists) return [];
+      const participants = doc.data()?.participants || [];
+      return participants.map((p: any, i: number) => ({
+        id: `${matchId}_${i}`,
+        matchId,
+        playerId: p.playerId,
+        team: p.team ?? null,
+        civilization: p.civilization,
+        isWinner: Boolean(p.isWinner),
+        eloChange: p.eloChange || 0,
+      }));
     },
-    findByPlayerId: async (playerId: number): Promise<MatchParticipant[]> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM match_participants WHERE playerId = ?',
-        args: [playerId]
+    findByPlayerId: async (playerId: string): Promise<MatchParticipant[]> => {
+      const snap = await matchesCol().where('playerIds', 'array-contains', playerId).get();
+      const result: MatchParticipant[] = [];
+      snap.docs.forEach(doc => {
+        const participants = doc.data().participants || [];
+        participants.forEach((p: any, i: number) => {
+          if (p.playerId === playerId) {
+            result.push({
+              id: `${doc.id}_${i}`,
+              matchId: doc.id,
+              playerId: p.playerId,
+              team: p.team ?? null,
+              civilization: p.civilization,
+              isWinner: Boolean(p.isWinner),
+              eloChange: p.eloChange || 0,
+            });
+          }
+        });
       });
-      return result.rows.map(row => ({
-        ...row,
-        isWinner: Boolean(row.isWinner)
-      })) as unknown as MatchParticipant[];
+      return result;
     },
     create: async (participant: Omit<MatchParticipant, 'id'>): Promise<MatchParticipant> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'INSERT INTO match_participants (matchId, playerId, team, civilization, isWinner, eloChange) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
-        args: [
-          participant.matchId,
-          participant.playerId,
-          participant.team,
-          participant.civilization,
-          participant.isWinner ? 1 : 0,
-          participant.eloChange
-        ]
+      const player = await db.users.findById(participant.playerId);
+      const pData = {
+        playerId: participant.playerId,
+        playerName: player?.username || 'Unknown',
+        team: participant.team,
+        civilization: participant.civilization,
+        isWinner: participant.isWinner,
+        eloChange: participant.eloChange,
+      };
+      await matchesCol().doc(participant.matchId).update({
+        participants: FieldValue.arrayUnion(pData),
+        playerIds: FieldValue.arrayUnion(participant.playerId),
       });
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        isWinner: Boolean(row.isWinner)
-      } as MatchParticipant;
-    }
+      return { id: `${participant.matchId}_${participant.playerId}`, ...participant };
+    },
   },
 
   tournaments: {
     findAll: async (): Promise<Tournament[]> => {
-      await ensureInit();
-      const result = await client.execute('SELECT * FROM tournaments ORDER BY createdAt DESC');
-      return result.rows.map((row: any) => ({
-        ...row,
-        bracketType: row.bracketType || 'single',
-        bracketReset: Boolean(row.bracketReset),
-        affectsElo: row.affectsElo !== 0
-      })) as Tournament[];
+      const snap = await tournamentsCol().orderBy('createdAt', 'desc').get();
+      return snap.docs.map(d => docToTournament(d)!);
     },
     findActive: async (): Promise<Tournament[]> => {
-      await ensureInit();
-      const result = await client.execute("SELECT * FROM tournaments WHERE status = 'active' ORDER BY createdAt DESC");
-      return result.rows.map((row: any) => ({
-        ...row,
-        bracketType: row.bracketType || 'single',
-        bracketReset: Boolean(row.bracketReset),
-        affectsElo: row.affectsElo !== 0
-      })) as Tournament[];
+      const snap = await tournamentsCol().where('status', '==', 'active').get();
+      return snap.docs.map(d => docToTournament(d)!).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     },
     findCompleted: async (): Promise<Tournament[]> => {
-      await ensureInit();
-      const result = await client.execute("SELECT * FROM tournaments WHERE status = 'completed' ORDER BY completedAt DESC");
-      return result.rows.map((row: any) => ({
-        ...row,
-        bracketType: row.bracketType || 'single',
-        bracketReset: Boolean(row.bracketReset),
-        affectsElo: row.affectsElo !== 0
-      })) as Tournament[];
+      const snap = await tournamentsCol().where('status', '==', 'completed').get();
+      return snap.docs.map(d => docToTournament(d)!).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
     },
-    findById: async (id: number): Promise<Tournament | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM tournaments WHERE id = ?',
-        args: [id]
-      });
-      if (!result.rows[0]) return undefined;
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        bracketType: row.bracketType || 'single',
-        bracketReset: Boolean(row.bracketReset),
-        affectsElo: row.affectsElo !== 0
-      } as Tournament;
+    findById: async (id: string): Promise<Tournament | undefined> => {
+      const doc = await tournamentsCol().doc(id).get();
+      return docToTournament(doc);
     },
-    create: async (tournament: { name: string; size: number; createdBy: number; bracketType?: 'single' | 'double'; bracketReset?: boolean; affectsElo?: boolean }): Promise<Tournament> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'INSERT INTO tournaments (name, size, createdBy, bracketType, bracketReset, affectsElo) VALUES (?, ?, ?, ?, ?, ?) RETURNING *',
-        args: [
-          tournament.name,
-          tournament.size,
-          tournament.createdBy,
-          tournament.bracketType || 'single',
-          tournament.bracketReset !== false ? 1 : 0,
-          tournament.affectsElo !== false ? 1 : 0
-        ]
-      });
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        bracketReset: Boolean(row.bracketReset),
-        affectsElo: row.affectsElo !== 0
-      } as Tournament;
+    create: async (tournament: { name: string; size: number; createdBy: string; bracketType?: 'single' | 'double'; bracketReset?: boolean; affectsElo?: boolean }): Promise<Tournament> => {
+      const data = {
+        name: tournament.name,
+        size: tournament.size,
+        status: 'active',
+        bracketType: tournament.bracketType || 'single',
+        bracketReset: tournament.bracketReset !== false,
+        affectsElo: tournament.affectsElo !== false,
+        winnerId: null,
+        createdBy: tournament.createdBy,
+        createdAt: FieldValue.serverTimestamp(),
+        completedAt: null,
+      };
+      const ref = await tournamentsCol().add(data);
+      return { id: ref.id, ...data, status: 'active' as const, bracketType: data.bracketType as 'single' | 'double', createdAt: new Date().toISOString() };
     },
-    update: async (id: number, updates: Partial<Tournament>) => {
-      await ensureInit();
-      const fields: string[] = [];
-      const values: any[] = [];
-
-      if (updates.status !== undefined) {
-        fields.push('status = ?');
-        values.push(updates.status);
-      }
-      if (updates.winnerId !== undefined) {
-        fields.push('winnerId = ?');
-        values.push(updates.winnerId);
-      }
-      if (updates.completedAt !== undefined) {
-        fields.push('completedAt = ?');
-        values.push(updates.completedAt);
-      }
-
-      if (fields.length > 0) {
-        values.push(id);
-        await client.execute({
-          sql: `UPDATE tournaments SET ${fields.join(', ')} WHERE id = ?`,
-          args: values
-        });
+    update: async (id: string, updates: Partial<Tournament>) => {
+      const cleaned: Record<string, any> = {};
+      if (updates.status !== undefined) cleaned.status = updates.status;
+      if (updates.winnerId !== undefined) cleaned.winnerId = updates.winnerId;
+      if (updates.completedAt !== undefined) cleaned.completedAt = updates.completedAt;
+      if (Object.keys(cleaned).length > 0) {
+        await tournamentsCol().doc(id).update(cleaned);
       }
     },
-    delete: async (id: number) => {
-      await ensureInit();
-      await client.execute({
-        sql: 'DELETE FROM tournament_matches WHERE tournamentId = ?',
-        args: [id]
-      });
-      await client.execute({
-        sql: 'DELETE FROM tournaments WHERE id = ?',
-        args: [id]
-      });
-    }
+    delete: async (id: string) => {
+      const tmSnap = await tournamentMatchesCol().where('tournamentId', '==', id).get();
+      const batch = adminDb.batch();
+      tmSnap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(tournamentsCol().doc(id));
+      await batch.commit();
+    },
   },
 
   tournamentMatches: {
-    findByTournamentId: async (tournamentId: number): Promise<TournamentMatch[]> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM tournament_matches WHERE tournamentId = ? ORDER BY bracket ASC, round DESC, position ASC',
-        args: [tournamentId]
-      });
-      return result.rows.map((row: any) => ({
-        ...row,
-        bracket: row.bracket || 'winners'
-      })) as TournamentMatch[];
+    findByTournamentId: async (tournamentId: string): Promise<TournamentMatch[]> => {
+      const snap = await tournamentMatchesCol().where('tournamentId', '==', tournamentId).get();
+      return snap.docs.map(d => docToTournamentMatch(d)!)
+        .sort((a, b) => a.bracket < b.bracket ? -1 : a.bracket > b.bracket ? 1 : b.round - a.round || a.position - b.position);
     },
-    findById: async (id: number): Promise<TournamentMatch | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM tournament_matches WHERE id = ?',
-        args: [id]
-      });
-      if (!result.rows[0]) return undefined;
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        bracket: row.bracket || 'winners'
-      } as TournamentMatch;
+    findById: async (id: string): Promise<TournamentMatch | undefined> => {
+      const doc = await tournamentMatchesCol().doc(id).get();
+      return docToTournamentMatch(doc);
     },
     create: async (match: Omit<TournamentMatch, 'id'>): Promise<TournamentMatch> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'INSERT INTO tournament_matches (tournamentId, bracket, round, position, player1Id, player2Id, winnerId, matchId, playedAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *',
-        args: [
-          match.tournamentId,
-          match.bracket || 'winners',
-          match.round,
-          match.position,
-          match.player1Id,
-          match.player2Id,
-          match.winnerId,
-          match.matchId,
-          match.playedAt
-        ]
-      });
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        bracket: row.bracket || 'winners'
-      } as TournamentMatch;
+      const data = {
+        tournamentId: match.tournamentId,
+        bracket: match.bracket || 'winners',
+        round: match.round,
+        position: match.position,
+        player1Id: match.player1Id,
+        player2Id: match.player2Id,
+        winnerId: match.winnerId,
+        matchId: match.matchId,
+        playedAt: match.playedAt,
+      };
+      const ref = await tournamentMatchesCol().add(data);
+      return { id: ref.id, ...data } as TournamentMatch;
     },
-    update: async (id: number, updates: Partial<TournamentMatch>) => {
-      await ensureInit();
-      const fields: string[] = [];
-      const values: any[] = [];
-
-      if (updates.player1Id !== undefined) {
-        fields.push('player1Id = ?');
-        values.push(updates.player1Id);
-      }
-      if (updates.player2Id !== undefined) {
-        fields.push('player2Id = ?');
-        values.push(updates.player2Id);
-      }
-      if (updates.winnerId !== undefined) {
-        fields.push('winnerId = ?');
-        values.push(updates.winnerId);
-      }
-      if (updates.matchId !== undefined) {
-        fields.push('matchId = ?');
-        values.push(updates.matchId);
-      }
-      if (updates.playedAt !== undefined) {
-        fields.push('playedAt = ?');
-        values.push(updates.playedAt);
-      }
-
-      if (fields.length > 0) {
-        values.push(id);
-        await client.execute({
-          sql: `UPDATE tournament_matches SET ${fields.join(', ')} WHERE id = ?`,
-          args: values
-        });
+    update: async (id: string, updates: Partial<TournamentMatch>) => {
+      const cleaned: Record<string, any> = {};
+      if (updates.player1Id !== undefined) cleaned.player1Id = updates.player1Id;
+      if (updates.player2Id !== undefined) cleaned.player2Id = updates.player2Id;
+      if (updates.winnerId !== undefined) cleaned.winnerId = updates.winnerId;
+      if (updates.matchId !== undefined) cleaned.matchId = updates.matchId;
+      if (updates.playedAt !== undefined) cleaned.playedAt = updates.playedAt;
+      if (Object.keys(cleaned).length > 0) {
+        await tournamentMatchesCol().doc(id).update(cleaned);
       }
     },
-    findByRoundAndPosition: async (tournamentId: number, round: number, position: number, bracket: string = 'winners'): Promise<TournamentMatch | undefined> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM tournament_matches WHERE tournamentId = ? AND bracket = ? AND round = ? AND position = ?',
-        args: [tournamentId, bracket, round, position]
-      });
-      if (!result.rows[0]) return undefined;
-      const row = result.rows[0] as any;
-      return {
-        ...row,
-        bracket: row.bracket || 'winners'
-      } as TournamentMatch;
+    findByRoundAndPosition: async (tournamentId: string, round: number, position: number, bracket: string = 'winners'): Promise<TournamentMatch | undefined> => {
+      const snap = await tournamentMatchesCol()
+        .where('tournamentId', '==', tournamentId)
+        .where('bracket', '==', bracket)
+        .where('round', '==', round)
+        .where('position', '==', position)
+        .limit(1)
+        .get();
+      return snap.empty ? undefined : docToTournamentMatch(snap.docs[0]);
     },
-    findByBracket: async (tournamentId: number, bracket: string): Promise<TournamentMatch[]> => {
-      await ensureInit();
-      const result = await client.execute({
-        sql: 'SELECT * FROM tournament_matches WHERE tournamentId = ? AND bracket = ? ORDER BY round DESC, position ASC',
-        args: [tournamentId, bracket]
-      });
-      return result.rows.map((row: any) => ({
-        ...row,
-        bracket: row.bracket || 'winners'
-      })) as TournamentMatch[];
-    }
-  }
+    findByBracket: async (tournamentId: string, bracket: string): Promise<TournamentMatch[]> => {
+      const snap = await tournamentMatchesCol()
+        .where('tournamentId', '==', tournamentId)
+        .where('bracket', '==', bracket)
+        .get();
+      return snap.docs.map(d => docToTournamentMatch(d)!)
+        .sort((a, b) => b.round - a.round || a.position - b.position);
+    },
+  },
 };
 
-// Optimized stats queries
+// Stats queries - read from Firestore matches with embedded participants
 export const statsQueries = {
-  getPlayerWinsLosses: async (playerId: number): Promise<{ wins: number; losses: number }> => {
-    await ensureInit();
-    const result = await client.execute({
-      sql: `
-        SELECT
-          SUM(CASE WHEN isWinner = 1 THEN 1 ELSE 0 END) as wins,
-          SUM(CASE WHEN isWinner = 0 THEN 1 ELSE 0 END) as losses
-        FROM match_participants
-        WHERE playerId = ?
-      `,
-      args: [playerId]
+  getPlayerWinsLosses: async (playerId: string): Promise<{ wins: number; losses: number }> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).get();
+    let wins = 0, losses = 0;
+    snap.docs.forEach(doc => {
+      for (const p of doc.data().participants || []) {
+        if (p.playerId === playerId) { p.isWinner ? wins++ : losses++; }
+      }
     });
-    const row = result.rows[0] as any;
-    return { wins: row.wins || 0, losses: row.losses || 0 };
+    return { wins, losses };
   },
 
-  getWeeklyLoserOptimized: async (): Promise<{ playerId: number; username: string; losses: number; wins: number } | null> => {
-    await ensureInit();
+  getWeeklyLoserOptimized: async (): Promise<{ playerId: string; username: string; losses: number; wins: number } | null> => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weekAgoStr = oneWeekAgo.toISOString();
+    const snap = await matchesCol().where('playedAt', '>=', Timestamp.fromDate(oneWeekAgo)).get();
 
-    const result = await client.execute({
-      sql: `
-        SELECT
-          u.id as playerId,
-          u.username,
-          SUM(CASE WHEN mp.isWinner = 0 THEN 1 ELSE 0 END) as losses,
-          SUM(CASE WHEN mp.isWinner = 1 THEN 1 ELSE 0 END) as wins
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        JOIN users u ON mp.playerId = u.id
-        WHERE m.playedAt >= ? AND u.username != 'admin'
-        GROUP BY mp.playerId
-        ORDER BY losses DESC
-        LIMIT 1
-      `,
-      args: [weekAgoStr]
+    const stats = new Map<string, { wins: number; losses: number }>();
+    snap.docs.forEach(doc => {
+      for (const p of doc.data().participants || []) {
+        const s = stats.get(p.playerId) || { wins: 0, losses: 0 };
+        p.isWinner ? s.wins++ : s.losses++;
+        stats.set(p.playerId, s);
+      }
     });
 
-    if (!result.rows[0]) return null;
-    const row = result.rows[0] as any;
-    if (row.losses === 0) return null;
-    return {
-      playerId: row.playerId,
-      username: row.username,
-      losses: row.losses,
-      wins: row.wins
-    };
-  },
-
-  getWeeklyPolleraOptimized: async (): Promise<{ playerId: number; username: string; gamesPlayed: number } | null> => {
-    await ensureInit();
-    const oneWeekAgo = new Date();
-    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weekAgoStr = oneWeekAgo.toISOString();
-
-    const result = await client.execute({
-      sql: `
-        SELECT
-          u.id as playerId,
-          u.username,
-          COUNT(*) as gamesPlayed
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        JOIN users u ON mp.playerId = u.id
-        WHERE m.playedAt >= ? AND u.username != 'admin'
-        GROUP BY mp.playerId
-        ORDER BY gamesPlayed ASC
-        LIMIT 1
-      `,
-      args: [weekAgoStr]
-    });
-
-    if (!result.rows[0]) return null;
-    const row = result.rows[0] as any;
-    return {
-      playerId: row.playerId,
-      username: row.username,
-      gamesPlayed: row.gamesPlayed
-    };
-  },
-
-  getAllPlayersStats: async (): Promise<Map<number, { wins: number; losses: number }>> => {
-    await ensureInit();
-    const result = await client.execute(`
-      SELECT
-        playerId,
-        SUM(CASE WHEN isWinner = 1 THEN 1 ELSE 0 END) as wins,
-        SUM(CASE WHEN isWinner = 0 THEN 1 ELSE 0 END) as losses
-      FROM match_participants
-      GROUP BY playerId
-    `);
-
-    const statsMap = new Map<number, { wins: number; losses: number }>();
-    for (const row of result.rows as any[]) {
-      statsMap.set(row.playerId, { wins: row.wins || 0, losses: row.losses || 0 });
+    let worst: { playerId: string; losses: number; wins: number } | null = null;
+    for (const [pid, s] of stats) {
+      if (s.losses > 0 && (!worst || s.losses > worst.losses)) {
+        worst = { playerId: pid, losses: s.losses, wins: s.wins };
+      }
     }
+    if (!worst) return null;
+    const user = await db.users.findById(worst.playerId);
+    if (!user || user.isAdmin) return null;
+    return { ...worst, username: user.username };
+  },
+
+  getWeeklyPolleraOptimized: async (): Promise<{ playerId: string; username: string; gamesPlayed: number } | null> => {
+    const oneWeekAgo = new Date();
+    oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+    const snap = await matchesCol().where('playedAt', '>=', Timestamp.fromDate(oneWeekAgo)).get();
+
+    const counts = new Map<string, number>();
+    snap.docs.forEach(doc => {
+      for (const p of doc.data().participants || []) {
+        counts.set(p.playerId, (counts.get(p.playerId) || 0) + 1);
+      }
+    });
+
+    let least: { playerId: string; gamesPlayed: number } | null = null;
+    for (const [pid, cnt] of counts) {
+      if (!least || cnt < least.gamesPlayed) {
+        least = { playerId: pid, gamesPlayed: cnt };
+      }
+    }
+    if (!least) return null;
+    const user = await db.users.findById(least.playerId);
+    if (!user || user.isAdmin) return null;
+    return { ...least, username: user.username };
+  },
+
+  getAllPlayersStats: async (): Promise<Map<string, { wins: number; losses: number }>> => {
+    const snap = await matchesCol().get();
+    const statsMap = new Map<string, { wins: number; losses: number }>();
+    snap.docs.forEach(doc => {
+      for (const p of doc.data().participants || []) {
+        const s = statsMap.get(p.playerId) || { wins: 0, losses: 0 };
+        p.isWinner ? s.wins++ : s.losses++;
+        statsMap.set(p.playerId, s);
+      }
+    });
     return statsMap;
   },
 
-  getPlayerStreakOptimized: async (playerId: number): Promise<Array<{ matchId: number; playedAt: string; isWinner: boolean }>> => {
-    await ensureInit();
-    const result = await client.execute({
-      sql: `
-        SELECT m.id as matchId, m.playedAt, mp.isWinner
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        WHERE mp.playerId = ?
-        ORDER BY m.playedAt DESC
-      `,
-      args: [playerId]
+  getPlayerStreakOptimized: async (playerId: string): Promise<Array<{ matchId: string; playedAt: string; isWinner: boolean }>> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).orderBy('playedAt', 'desc').get();
+    const results: Array<{ matchId: string; playedAt: string; isWinner: boolean }> = [];
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      for (const p of d.participants || []) {
+        if (p.playerId === playerId) {
+          results.push({ matchId: doc.id, playedAt: toISO(d.playedAt), isWinner: Boolean(p.isWinner) });
+        }
+      }
     });
-    return result.rows.map((row: any) => ({
-      matchId: row.matchId,
-      playedAt: row.playedAt,
-      isWinner: Boolean(row.isWinner)
-    }));
+    return results;
   },
 
-  getPlayerFullStatsOptimized: async (playerId: number): Promise<{ wins: number; losses: number; history: Array<{ playedAt: string; isWinner: boolean }> }> => {
-    await ensureInit();
-    const result = await client.execute({
-      sql: `
-        SELECT m.playedAt, mp.isWinner
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        WHERE mp.playerId = ?
-        ORDER BY m.playedAt ASC
-      `,
-      args: [playerId]
-    });
-
-    let wins = 0;
-    let losses = 0;
+  getPlayerFullStatsOptimized: async (playerId: string): Promise<{ wins: number; losses: number; history: Array<{ playedAt: string; isWinner: boolean }> }> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).orderBy('playedAt', 'asc').get();
+    let wins = 0, losses = 0;
     const history: Array<{ playedAt: string; isWinner: boolean }> = [];
-
-    for (const row of result.rows as any[]) {
-      const isWinner = Boolean(row.isWinner);
-      history.push({ playedAt: row.playedAt, isWinner });
-      if (isWinner) wins++;
-      else losses++;
-    }
-
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      for (const p of d.participants || []) {
+        if (p.playerId === playerId) {
+          const isWinner = Boolean(p.isWinner);
+          history.push({ playedAt: toISO(d.playedAt), isWinner });
+          isWinner ? wins++ : losses++;
+        }
+      }
+    });
     return { wins, losses, history };
   },
 
-  getNemesisVictimOptimized: async (playerId: number): Promise<Array<{ opponentId: number; opponentName: string; wins: number; losses: number }>> => {
-    await ensureInit();
-    // Get 1v1 matches with opponent info in one query
-    const result = await client.execute({
-      sql: `
-        SELECT
-          opponent.playerId as opponentId,
-          u.username as opponentName,
-          SUM(CASE WHEN player.isWinner = 1 THEN 1 ELSE 0 END) as wins,
-          SUM(CASE WHEN player.isWinner = 0 THEN 1 ELSE 0 END) as losses
-        FROM match_participants player
-        JOIN matches m ON player.matchId = m.id
-        JOIN match_participants opponent ON m.id = opponent.matchId AND opponent.playerId != player.playerId
-        JOIN users u ON opponent.playerId = u.id
-        WHERE player.playerId = ? AND m.matchType = '1v1'
-        GROUP BY opponent.playerId
-      `,
-      args: [playerId]
+  getNemesisVictimOptimized: async (playerId: string): Promise<Array<{ opponentId: string; opponentName: string; wins: number; losses: number }>> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).get();
+    const h2h = new Map<string, { wins: number; losses: number }>();
+
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      if (d.matchType !== '1v1') return;
+      const parts = d.participants || [];
+      const me = parts.find((p: any) => p.playerId === playerId);
+      const opp = parts.find((p: any) => p.playerId !== playerId);
+      if (!me || !opp) return;
+      const s = h2h.get(opp.playerId) || { wins: 0, losses: 0 };
+      me.isWinner ? s.wins++ : s.losses++;
+      h2h.set(opp.playerId, s);
     });
 
-    return result.rows.map((row: any) => ({
-      opponentId: row.opponentId,
-      opponentName: row.opponentName,
-      wins: row.wins || 0,
-      losses: row.losses || 0
+    return Array.from(h2h.entries()).map(([oppId, s]) => ({
+      opponentId: oppId,
+      opponentName: '', // filled by caller if needed
+      ...s,
     }));
   },
 
-  getWeeklyGamesCountOptimized: async (): Promise<Map<number, number>> => {
-    await ensureInit();
+  getWeeklyGamesCountOptimized: async (): Promise<Map<string, number>> => {
     const oneWeekAgo = new Date();
     oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
-    const weekAgoStr = oneWeekAgo.toISOString();
-
-    const result = await client.execute({
-      sql: `
-        SELECT mp.playerId, COUNT(*) as gamesPlayed
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        WHERE m.playedAt >= ?
-        GROUP BY mp.playerId
-      `,
-      args: [weekAgoStr]
+    const snap = await matchesCol().where('playedAt', '>=', Timestamp.fromDate(oneWeekAgo)).get();
+    const gamesMap = new Map<string, number>();
+    snap.docs.forEach(doc => {
+      for (const p of doc.data().participants || []) {
+        gamesMap.set(p.playerId, (gamesMap.get(p.playerId) || 0) + 1);
+      }
     });
-
-    const gamesMap = new Map<number, number>();
-    for (const row of result.rows as any[]) {
-      gamesMap.set(row.playerId, row.gamesPlayed);
-    }
     return gamesMap;
   },
 
-  getFirstMatchResult: async (playerId: number): Promise<boolean | null> => {
-    await ensureInit();
-    const result = await client.execute({
-      sql: `
-        SELECT mp.isWinner
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        WHERE mp.playerId = ?
-        ORDER BY m.playedAt ASC
-        LIMIT 1
-      `,
-      args: [playerId]
-    });
-
-    if (!result.rows[0]) return null;
-    return Boolean((result.rows[0] as any).isWinner);
+  getFirstMatchResult: async (playerId: string): Promise<boolean | null> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).orderBy('playedAt', 'asc').limit(1).get();
+    if (snap.empty) return null;
+    const parts = snap.docs[0].data().participants || [];
+    const me = parts.find((p: any) => p.playerId === playerId);
+    return me ? Boolean(me.isWinner) : null;
   },
 
-  getPlayerRecentMatches: async (playerId: number, limit: number = 10): Promise<Array<{ matchId: number; matchType: string; playedAt: string; civilization: string; isWinner: boolean; eloChange: number }>> => {
-    await ensureInit();
-    const result = await client.execute({
-      sql: `
-        SELECT m.id as matchId, m.matchType, m.playedAt, mp.civilization, mp.isWinner, mp.eloChange
-        FROM match_participants mp
-        JOIN matches m ON mp.matchId = m.id
-        WHERE mp.playerId = ?
-        ORDER BY m.playedAt DESC
-        LIMIT ?
-      `,
-      args: [playerId, limit]
+  getPlayerRecentMatches: async (playerId: string, limit: number = 10): Promise<Array<{ matchId: string; matchType: string; playedAt: string; civilization: string; isWinner: boolean; eloChange: number }>> => {
+    const snap = await matchesCol().where('playerIds', 'array-contains', playerId).orderBy('playedAt', 'desc').limit(limit).get();
+    const results: Array<{ matchId: string; matchType: string; playedAt: string; civilization: string; isWinner: boolean; eloChange: number }> = [];
+    snap.docs.forEach(doc => {
+      const d = doc.data();
+      for (const p of d.participants || []) {
+        if (p.playerId === playerId) {
+          results.push({
+            matchId: doc.id,
+            matchType: d.matchType,
+            playedAt: toISO(d.playedAt),
+            civilization: p.civilization,
+            isWinner: Boolean(p.isWinner),
+            eloChange: p.eloChange || 0,
+          });
+        }
+      }
     });
-
-    return result.rows.map((row: any) => ({
-      matchId: row.matchId,
-      matchType: row.matchType,
-      playedAt: row.playedAt,
-      civilization: row.civilization,
-      isWinner: Boolean(row.isWinner),
-      eloChange: row.eloChange
-    }));
-  }
+    return results;
+  },
 };
 
-// Type exports
 export type { User, Match, MatchParticipant, Tournament, TournamentMatch };
 export type Player = User;

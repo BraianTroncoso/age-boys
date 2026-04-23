@@ -105,7 +105,7 @@ export async function getWeeklyLoser() {
  * Obtiene la racha actual del jugador
  * Optimizado: usa una sola consulta SQL
  */
-export async function getPlayerStreak(playerId: number) {
+export async function getPlayerStreak(playerId: string) {
   const playerMatches = await statsQueries.getPlayerStreakOptimized(playerId);
 
   if (playerMatches.length === 0) {
@@ -147,13 +147,13 @@ export async function getPlayerStreak(playerId: number) {
  * Obtiene némesis y víctima del jugador (solo 1v1)
  * Optimizado: usa una sola consulta SQL con JOINs
  */
-export async function getNemesisAndVictim(playerId: number) {
+export async function getNemesisAndVictim(playerId: string) {
   const records = await statsQueries.getNemesisVictimOptimized(playerId);
 
-  let nemesis: { playerId: number; name: string; wins: number; losses: number; frase: string } | null = null;
+  let nemesis: { playerId: string; name: string; wins: number; losses: number; frase: string } | null = null;
   let maxLosses = 0;
 
-  let victim: { playerId: number; name: string; wins: number; losses: number; frase: string } | null = null;
+  let victim: { playerId: string; name: string; wins: number; losses: number; frase: string } | null = null;
   let maxWins = 0;
 
   for (const record of records) {
@@ -187,7 +187,7 @@ export async function getNemesisAndVictim(playerId: number) {
  * Obtiene estadísticas completas del jugador
  * Optimizado: usa una sola consulta SQL
  */
-export async function getPlayerFullStats(playerId: number) {
+export async function getPlayerFullStats(playerId: string) {
   const data = await statsQueries.getPlayerFullStatsOptimized(playerId);
 
   // Calcular rachas máximas

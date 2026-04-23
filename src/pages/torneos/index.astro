@@ -4,9 +4,6 @@ import { db } from '../../db';
 import { getTournamentProgress, getTotalRounds, getRoundName } from '../../lib/tournaments';
 
 const user = Astro.locals.user;
-if (!user) {
-  return Astro.redirect('/login');
-}
 
 const activeTournaments = await db.tournaments.findActive();
 const completedTournaments = await db.tournaments.findCompleted();

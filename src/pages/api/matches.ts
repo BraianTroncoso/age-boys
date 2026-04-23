@@ -3,7 +3,7 @@ import { db, invalidateCache } from '../../db';
 import { calculate1v1Elo, calculateTeamElo, calculateFfaElo } from '../../lib/elo';
 
 interface Participant {
-  playerId: number;
+  playerId: string;
   civilization: string;
   team: number | null;
   isWinner: boolean;
@@ -32,7 +32,7 @@ export const POST: APIRoute = async ({ request, locals }) => {
 
     // Create match
     const match = await db.matches.create({ matchType, createdBy: locals.user?.id });
-    const eloChanges: Map<number, number> = new Map();
+    const eloChanges: Map<string, number> = new Map();
 
     if (matchType === '1v1') {
       const winner = participants.find(p => p.isWinner)!;

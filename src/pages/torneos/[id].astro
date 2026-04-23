@@ -9,7 +9,7 @@ if (!user) {
 }
 
 const { id } = Astro.params;
-const tournamentId = parseInt(id || '0');
+const tournamentId = id || '';
 
 const tournament = await db.tournaments.findById(tournamentId);
 if (!tournament) {
@@ -25,13 +25,13 @@ const progress = getTournamentProgress(matches);
 const isComplete = isTournamentComplete(matches, tournament.bracketType);
 
 // Get all players involved
-const playerIds = new Set<number>();
+const playerIds = new Set<string>();
 matches.forEach(m => {
   if (m.player1Id) playerIds.add(m.player1Id);
   if (m.player2Id) playerIds.add(m.player2Id);
 });
 
-const playersMap: Record<number, { username: string; eloRating: number }> = {};
+const playersMap: Record<string, { username: string; eloRating: number }> = {};
 for (const playerId of playerIds) {
   const player = await db.users.findById(playerId);
   if (player) {
@@ -460,8 +460,8 @@ const matchesByRound: Record<number, typeof matches> = winnersByRound;
 <script define:vars={{ tournamentId }}>
   document.querySelectorAll('.select-winner-btn').forEach(btn => {
     btn.addEventListener('click', async () => {
-      const winnerId = parseInt(btn.dataset.winnerId);
-      const matchId = parseInt(btn.dataset.matchId);
+      const winnerId = btn.dataset.winnerId;
+      const matchId = btn.dataset.matchId;
 
       if (!confirm('¿Confirmar ganador?')) return;
 

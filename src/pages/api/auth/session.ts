@@ -15,14 +15,20 @@ export const POST: APIRoute = async ({ request }) => {
     const decoded = await adminAuth.verifyIdToken(idToken);
     const sessionCookie = await createSessionCookie(idToken);
 
-    const user = await db.users.findById(decoded.uid);
+    let user = await db.users.findById(decoded.uid);
+    let isNewUser = false;
+
     if (!user) {
-      return new Response(JSON.stringify({ success: false, error: 'Usuario no encontrado. Registrate primero.' }), {
-        status: 404, headers: { 'Content-Type': 'application/json' },
+      await db.users.create({
+        id: decoded.uid,
+        username: decoded.name || decoded.email?.split('@')[0] || 'Jugador',
+        email: decoded.email,
+        favoriteCiv: 'spanish',
       });
+      isNewUser = true;
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    return new Response(JSON.stringify({ success: true, isNewUser }), {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
@@ -30,8 +36,8 @@ export const POST: APIRoute = async ({ request }) => {
       },
     });
   } catch (error: any) {
-    console.error('Login error:', error);
-    return new Response(JSON.stringify({ success: false, error: 'Error del servidor' }), {
+    console.error('Session error:', error);
+    return new Response(JSON.stringify({ success: false, error: 'Error al crear sesión' }), {
       status: 500, headers: { 'Content-Type': 'application/json' },
     });
   }

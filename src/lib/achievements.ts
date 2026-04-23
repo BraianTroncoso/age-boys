@@ -14,7 +14,7 @@ export interface Achievement {
 
 // Versión optimizada que acepta stats pre-calculados para evitar duplicación
 export async function getPlayerAchievements(
-  playerId: number,
+  playerId: string,
   preloadedStats?: { fullStats: Awaited<ReturnType<typeof getPlayerFullStats>>; nemesisVictim: Awaited<ReturnType<typeof getNemesisAndVictim>> }
 ): Promise<Achievement[]> {
   const achievements: Achievement[] = [];
@@ -82,7 +82,7 @@ export async function getPlayerAchievements(
 }
 
 // Optimizado: usa una sola consulta SQL
-async function getFirstMatchResult(playerId: number): Promise<boolean | null> {
+async function getFirstMatchResult(playerId: string): Promise<boolean | null> {
   return statsQueries.getFirstMatchResult(playerId);
 }
 

@@ -42,8 +42,8 @@ export function getRoundName(round: number, totalRounds: number): string {
  * Handles byes for non-power-of-2 player counts
  */
 export function generateBracketMatches(
-  tournamentId: number,
-  playerIds: number[]
+  tournamentId: string,
+  playerIds: string[]
 ): Omit<TournamentMatch, 'id'>[] {
   const shuffled = shuffleArray(playerIds);
   const playerCount = shuffled.length;
@@ -167,8 +167,8 @@ export function getLosersRounds(size: number): number {
  * Supports non-power-of-2 player counts using byes (e.g., 6 players)
  */
 export function generateDoubleEliminationBracket(
-  tournamentId: number,
-  playerIds: number[]
+  tournamentId: string,
+  playerIds: string[]
 ): Omit<TournamentMatch, 'id'>[] {
   const shuffled = shuffleArray(playerIds);
   const playerCount = shuffled.length;
@@ -605,7 +605,7 @@ export function isTournamentComplete(matches: TournamentMatch[], bracketType: Br
 /**
  * Get tournament winner
  */
-export function getTournamentWinner(matches: TournamentMatch[], bracketType: BracketType = 'single'): number | null {
+export function getTournamentWinner(matches: TournamentMatch[], bracketType: BracketType = 'single'): string | null {
   if (bracketType === 'single') {
     const finalMatch = matches.find(m => m.bracket === 'winners' && m.round === 1);
     return finalMatch?.winnerId || null;

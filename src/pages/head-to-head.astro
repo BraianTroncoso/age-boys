@@ -8,8 +8,8 @@ const players = allPlayers.filter(p => p.username !== 'admin');
 
 // Get query params
 const url = new URL(Astro.request.url);
-const player1Id = parseInt(url.searchParams.get('player1') || url.searchParams.get('player') || '0');
-const player2Id = parseInt(url.searchParams.get('player2') || '0');
+const player1Id = url.searchParams.get('player1') || url.searchParams.get('player') || '';
+const player2Id = url.searchParams.get('player2') || '';
 
 let h2hData = null;
 

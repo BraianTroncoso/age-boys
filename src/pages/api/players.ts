@@ -1,6 +1,6 @@
 import type { APIRoute } from 'astro';
 import { db } from '../../db';
-import { isAdmin, hashPassword } from '../../lib/auth';
+import { isAdmin } from '../../lib/auth';
 
 // POST: Solo admin puede crear jugadores invitados
 export const POST: APIRoute = async ({ request, locals }) => {
@@ -29,11 +29,11 @@ export const POST: APIRoute = async ({ request, locals }) => {
       });
     }
 
-    // Crear usuario invitado con password temporal
-    const passwordHash = await hashPassword('guest123');
+    // Crear usuario invitado (guest) con ID aleatorio
+    const guestId = `guest_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const player = await db.users.create({
+      id: guestId,
       username: name.trim(),
-      passwordHash,
       favoriteCiv: 'spanish'
     });
 

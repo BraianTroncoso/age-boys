@@ -113,7 +113,7 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
       </form>
     </div>
 
-    {user.isAdmin === 1 && (
+    {user.isAdmin && (
       <div class="aoe-panel border-red-500/30">
         <h3 class="aoe-title text-xl mb-4 text-red-400">Panel de Administracion</h3>
         <p class="text-aoe-cream-dark text-sm mb-4">Eliminar partidas y torneos revierte automaticamente los cambios de ELO.</p>
@@ -207,7 +207,7 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
               ${!t.affectsElo ? '<span class="text-pink-400 text-xs ml-1">[Sin ELO]</span>' : ''}
             </div>
             <button
-              onclick="deleteTournament(${t.id}, '${t.name.replace(/'/g, "\\'")}')"
+              onclick="deleteTournament('${t.id}', '${t.name.replace(/'/g, "\\'")}')"
               class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
             >
               Eliminar
@@ -232,7 +232,7 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
                 <div class="text-sm">${players}</div>
               </div>
               <button
-                onclick="deleteMatch(${m.id})"
+                onclick="deleteMatch('${m.id}')"
                 class="px-2 py-1 bg-red-600 hover:bg-red-700 text-white text-xs rounded"
               >
                 Eliminar
@@ -247,7 +247,7 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
     }
   }
 
-  (window as any).deleteTournament = async function(id: number, name: string) {
+  (window as any).deleteTournament = async function(id: string, name: string) {
     if (!confirm(`¿Seguro que queres eliminar el torneo "${name}"? Se revertira el ELO si aplica.`)) {
       return;
     }
@@ -271,7 +271,7 @@ const [color1, color2] = getCivilizationColors(user.favoriteCiv);
     }
   };
 
-  (window as any).deleteMatch = async function(id: number) {
+  (window as any).deleteMatch = async function(id: string) {
     if (!confirm(`¿Seguro que queres eliminar la partida #${id}? Se revertira el ELO.`)) {
       return;
     }
